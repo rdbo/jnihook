@@ -5,19 +5,19 @@
 static JavaVM *jvm;
 static jvmtiEnv *jvmti;
 static int callCounter = 0;
+static jmethodID myFunctionID;
 
-jvalue hkMyFunction(jmethodID mID, jvalue **args, size_t nargs, void *thread, void *arg)
+jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
 {
 	std::cout << "hkMyFunction called!" << std::endl;
 
-	std::cout << "[*] method ID: " << mID << std::endl;
 	std::cout << "[*] args: " << args << std::endl;
 	std::cout << "[*] nargs: " << nargs << std::endl;
 	std::cout << "[*] thread: " << thread << std::endl;
 	std::cout << "[*] arg: " << arg << std::endl;
 
 	if (++callCounter >= 3) {
-		JNIHook_Detach(mID);
+		JNIHook_Detach(myFunctionID);
 		std::cout << "[*] Unhooked method" << std::endl;
 	}
 
@@ -27,18 +27,16 @@ jvalue hkMyFunction(jmethodID mID, jvalue **args, size_t nargs, void *thread, vo
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 	std::cout << "[*] JNI: " << jni << std::endl;
 
-	jvalue *mynumber = args[0];
-	jvalue *name = args[1];
-	std::cout << "[*] mynumber address: " << mynumber << std::endl;
-	std::cout << "[*] mynumber value: " << mynumber->i << std::endl;
-	std::cout << "[*] name: " << name << std::endl;
-	std::cout << "[*] name object: " << name->l << std::endl;
-	mynumber->i = 1337;
+	jvalue mynumber = args[0];
+	jvalue name = args[1];
+	std::cout << "[*] mynumber value: " << mynumber.i << std::endl;
+	std::cout << "[*] name object: " << name.l << std::endl;
+	mynumber.i = 1337;
 
 	// Force call the original function
-	jclass clazz;
-	jvmti->GetMethodDeclaringClass(mID, &clazz);
-	std::cout << "[*] clazz: " << clazz << std::endl;
+	// jclass clazz;
+	// jvmti->GetMethodDeclaringClass(mID, &clazz);
+	// std::cout << "[*] clazz: " << clazz << std::endl;
 	
 	// jint result = jni->CallStaticIntMethod(clazz, mID, 1000, name->l);
 	// std::cout << "[*] Forced call result: " << result << std::endl;
@@ -49,7 +47,6 @@ jvalue hkMyFunction(jmethodID mID, jvalue **args, size_t nargs, void *thread, vo
 static void start(JavaVM *jvm, JNIEnv *jni)
 {
 	jclass dummyClass;
-	jmethodID myFunctionID;
 	
 	dummyClass = jni->FindClass("dummy/Dummy");
 	if (!dummyClass) {

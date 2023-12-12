@@ -57,13 +57,13 @@ extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *sender
 	size_t nparams = (size_t)*_size_of_parameters;
 
 	// Sort arguments to easier handling during the hook
-	jvalue **args = (jvalue **)malloc(nparams * sizeof(jvalue *));
+	jvalue *args = (jvalue *)malloc(nparams * sizeof(jvalue));
 	for (size_t i = 0; i < nparams; ++i) {
 		// stack layout for nparams == 3:
 		//   - senderSP[2] is arg0
 		//   - senderSP[1] is arg1
 		//   - senderSP[0] is arg2
-		args[i] = (jvalue *)&((void **)senderSP)[nparams - 1 - i];
+		args[i] = ((jvalue *)senderSP)[nparams - 1 - i];
 	}
 
 	// Restore original Method to allow for a midhook call
@@ -71,7 +71,7 @@ extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *sender
 	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback((jmethodID)&methodAddr, args, nparams, thread, hkEntry->second.arg);
+	jvalue call_result = hkEntry->second.callback(args, nparams, thread, hkEntry->second.arg);
 
 	// Free sorted arguments
 	free(args);
