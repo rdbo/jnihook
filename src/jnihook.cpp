@@ -61,7 +61,7 @@ extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *sender
 	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback((jmethodID)&methodAddr, senderSP, nparams, thread, hkEntry->second.arg);
+	jvalue call_result = hkEntry->second.callback((jmethodID)&methodAddr, (jvalue *)senderSP, nparams, thread, hkEntry->second.arg);
 
 	// Handle scheduled unhook
 	if (hkEntry->second.should_unhook) {

@@ -6,13 +6,13 @@ static JavaVM *jvm;
 static jvmtiEnv *jvmti;
 static int callCounter = 0;
 
-jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, void *arg)
+jvalue hkMyFunction(jmethodID mID, jvalue *args, size_t nargs, void *thread, void *arg)
 {
 	std::cout << "hkMyFunction called!" << std::endl;
 
 	std::cout << "[*] method ID: " << mID << std::endl;
-	std::cout << "[*] params: " << params << std::endl;
-	std::cout << "[*] nparams: " << nparams << std::endl;
+	std::cout << "[*] args: " << args << std::endl;
+	std::cout << "[*] nargs: " << nargs << std::endl;
 	std::cout << "[*] thread: " << thread << std::endl;
 	std::cout << "[*] arg: " << arg << std::endl;
 
@@ -27,8 +27,8 @@ jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, v
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 	std::cout << "[*] JNI: " << jni << std::endl;
 
-	jint *mynumber = (jint *)&((void **)params)[1];
-	void *name = (void *)&((void **)params)[0];
+	jint *mynumber = (jint *)&((void **)args)[1];
+	void *name = (void *)&((void **)args)[0];
 	std::cout << "[*] mynumber address: " << mynumber << std::endl;
 	std::cout << "[*] mynumber value: " << *mynumber << std::endl;
 	std::cout << "[*] name: " << name << std::endl;
