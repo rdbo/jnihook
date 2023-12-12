@@ -31,9 +31,11 @@ extern "C" void jnihook_gateway();
 
 typedef struct {
 	jnihook_callback_t callback;
+	int _access_flags;
 	void *_i2i_entry;
 	void *_from_interpreted_entry;
 	void *arg;
+	int should_unhook;
 } jniHookInfo;
 
 static std::unordered_map<void *, jniHookInfo> jniHookTable;
@@ -42,18 +44,28 @@ static jvmtiEnv *jvmti = nullptr;
 
 extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
 {
-	auto hkEntry = jniHookTable[methodAddr];
+	auto hkEntry = jniHookTable.find(methodAddr);
 
 	auto method = VMType::from_instance("Method", methodAddr).value();
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	// Restore original Method to allow for a midhook call
-	*_i2i_entry = hkEntry._i2i_entry;
-	*_from_interpreted_entry = hkEntry._from_interpreted_entry;
+	*_i2i_entry = hkEntry->second._i2i_entry;
+	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry.arg);
+	jvalue call_result = hkEntry->second.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry->second.arg);
+
+	// Handle scheduled unhook
+	if (hkEntry->second.should_unhook) {
+		// Restore access flags
+		int *_access_flags = method.get_field<int>("_access_flags").value();
+		*_access_flags = hkEntry->second._access_flags;
+		jniHookTable.erase(methodAddr);
+		std::cout << "UNHOOK HANDLED!!!" << std::endl;
+		return call_result;
+	}
 
 	// Rehook method, so that its next call will fall into the hook
 	*_i2i_entry = (void *)jnihook_gateway;
@@ -107,22 +119,24 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	// Retrieve method AFTER RetransformClasses (doing so before might not work!)
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
 
-	// Prevent method from being compiled
-	int *_access_flags = method.get_field<int>("_access_flags").value();
-	*_access_flags = *_access_flags | JVM_ACC_NOT_C2_COMPILABLE | JVM_ACC_NOT_C1_COMPILABLE | JVM_ACC_NOT_C2_OSR_COMPILABLE;
-
 	// Store hook information
+	int *_access_flags = method.get_field<int>("_access_flags").value();
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	jniHookInfo hkInfo = {
 		.callback = callback,
+		._access_flags = *_access_flags,
 		._i2i_entry = *_i2i_entry,
 		._from_interpreted_entry = *_from_interpreted_entry,
-		.arg = arg
+		.arg = arg,
+		.should_unhook = 0
 	};
 
 	jniHookTable[method.get_instance()] = hkInfo;
+
+	// Prevent method from being compiled
+	*_access_flags = *_access_flags | JVM_ACC_NOT_C2_COMPILABLE | JVM_ACC_NOT_C1_COMPILABLE | JVM_ACC_NOT_C2_OSR_COMPILABLE;
 
 	// Place interpreted hooks
 	*_i2i_entry = (void *)jnihook_gateway;
@@ -133,24 +147,14 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 
 JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
 {
-	/*
 	void *methodAddr = *(void **)mID;
 
 	auto hkEntry = jniHookTable.find(methodAddr);
 	if (hkEntry == jniHookTable.end())
 		return JNI_ERR;
 
-	auto method = VMType::from_instance("Method", methodAddr).value();
-	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
-	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
-
-	// Restore original Method
-	*_i2i_entry = hkEntry->second._i2i_entry;
-	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
-
-	// Delete hook entry
-	jniHookTable.erase(methodAddr);
-	*/
+	hkEntry->second.should_unhook = 1; // Schedule unhook
+	
 	return JNI_OK;
 }
 
