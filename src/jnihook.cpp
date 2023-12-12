@@ -31,7 +31,7 @@ extern "C" void jnihook_gateway();
 
 typedef struct {
 	jnihook_callback_t callback;
-	int _access_flags;
+	jint _access_flags; // NOTE: AccessFlags is a class, but it only has the 'jint _flags' field, so it can be accessed as 'jint' directly
 	void *_i2i_entry;
 	void *_from_interpreted_entry;
 	void *arg;
@@ -60,7 +60,7 @@ extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *sender
 	// Handle scheduled unhook
 	if (hkEntry->second.should_unhook) {
 		// Restore access flags
-		int *_access_flags = method.get_field<int>("_access_flags").value();
+		jint *_access_flags = method.get_field<jint>("_access_flags").value();
 		*_access_flags = hkEntry->second._access_flags;
 		jniHookTable.erase(methodAddr);
 		return call_result;
@@ -119,7 +119,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
 
 	// Store hook information
-	int *_access_flags = method.get_field<int>("_access_flags").value();
+	jint *_access_flags = method.get_field<jint>("_access_flags").value();
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
