@@ -45,7 +45,11 @@ extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *method, void *senderSP, v
 {
 	std::cout << "CALL HANDLER CALLED!" << std::endl;
 
-	jniHookTable[method].callback((jmethodID)&method, senderSP, 0, thread, jniHookTable[method].arg);
+	auto hkEntry = jniHookTable[method];
+
+	std::cout << "hkEntry arg: " << hkEntry.arg << std::endl;
+
+	hkEntry.callback((jmethodID)&method, senderSP, 0, thread, hkEntry.arg);
 	
 	return jniHookTable[method]._i2i_entry;
 }
@@ -61,7 +65,8 @@ extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
 		return result;
 
 	jvmtiCapabilities capabilities = { .can_retransform_classes = JVMTI_ENABLE };
-	jvmti->AddCapabilities(&capabilities);
+	if (jvmti->AddCapabilities(&capabilities) != JVMTI_ERROR_NONE)
+		return JNI_ERR;
 
 	std::cout << "JVMTI initialized" << std::endl;
 	
@@ -89,6 +94,8 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 		return JNI_ERR;
 
 	std::cout << "method ID: " << mID << std::endl;
+	std::cout << "callback: " << (void *)callback << std::endl;
+	std::cout << "arg: " << arg << std::endl;
 
 	// Force class methods to be interpreted
 	JNIEnv *jni;
@@ -96,10 +103,11 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	if ((result = jvm->GetEnv((void **)&jni, JNI_VERSION_1_6)) != JNI_OK)
 		return result;
 	
-	if ((result = jvmti->GetMethodDeclaringClass(mID, &klass)) != JNI_OK)
-		return result;
+	if (jvmti->GetMethodDeclaringClass(mID, &klass) != JVMTI_ERROR_NONE)
+		return JNI_ERR;
 
-	jvmti->RetransformClasses(1, &klass);
+	if (jvmti->RetransformClasses(1, &klass) != JVMTI_ERROR_NONE)
+		return JNI_ERR;
 
 	jni->DeleteLocalRef(klass);
 
@@ -110,6 +118,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	int *_access_flags = method.get_field<int>("_access_flags").value();
 	*_access_flags = *_access_flags | JVM_ACC_NOT_C2_COMPILABLE | JVM_ACC_NOT_C1_COMPILABLE | JVM_ACC_NOT_C2_OSR_COMPILABLE;
 
+	// Store hook information
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 	void **_from_compiled_entry = method.get_field<void *>("_from_compiled_entry").value();
@@ -118,7 +127,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	std::cout << "_from_interpreted_entry: " << *_from_interpreted_entry << std::endl;
 	std::cout << "_from_compiled_entry: " << *_from_compiled_entry << std::endl;
 
-	jniHookInfo hkInfo {
+	jniHookInfo hkInfo = {
 		.callback = callback,
 		._i2i_entry = *_i2i_entry,
 		._from_interpreted_entry = *_from_interpreted_entry,
@@ -128,6 +137,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 
 	jniHookTable[method.get_instance()] = hkInfo;
 
+	// Place interpreted hooks
 	*_i2i_entry = (void *)jnihook_gateway;
 	*_from_interpreted_entry = (void *)jnihook_gateway;
 

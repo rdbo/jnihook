@@ -28,7 +28,7 @@
 #define JNIHOOK_API
 #define JNIHOOK_CALLBACK
 
-typedef void *(JNIHOOK_CALLBACK *jnihook_callback_t)(jmethodID mID, void *params, size_t nparams, void *thread, void *arg);
+typedef jvalue(JNIHOOK_CALLBACK *jnihook_callback_t)(jmethodID mID, void *params, size_t nparams, void *thread, void *arg);
 
 #ifdef __cplusplus
 extern "C" {
