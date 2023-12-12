@@ -2,6 +2,9 @@
 #include <jvmti.h>
 #include <iostream>
 
+static JavaVM *jvm;
+static jvmtiEnv *jvmti;
+
 jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, void *arg)
 {
 	std::cout << "hkMyFunction called!" << std::endl;
@@ -10,17 +13,11 @@ jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, v
 	std::cout << "[*] params: " << params << std::endl;
 	std::cout << "[*] nparams: " << nparams << std::endl;
 	std::cout << "[*] thread: " << thread << std::endl;
-	
-	JavaVM *jvm = (JavaVM *)arg;
-	std::cout << "[*] Retrieved JVM: " << jvm << std::endl;
+	std::cout << "[*] arg: " << arg << std::endl;
 
 	JNIEnv *jni;
-	jvmtiEnv *jvmti;
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 	std::cout << "[*] JNI: " << jni << std::endl;
-
-	jvm->GetEnv((void **)&jvmti, JVMTI_VERSION_1_0);
-	std::cout << "[*] JVMTI: " << jvmti << std::endl;
 
 	jint *mynumber = (jint *)&((void **)params)[1];
 	void *name = (void *)&((void **)params)[0];
@@ -60,13 +57,12 @@ static void start(JavaVM *jvm, JNIEnv *jni)
 	std::cout << "[*] myFunction ID: " << myFunctionID << std::endl;
 
 	JNIHook_Init(jvm);
-	JNIHook_Attach(myFunctionID, hkMyFunction, (void *)jvm);
+	JNIHook_Attach(myFunctionID, hkMyFunction, (void *)0xdeadbeef);
 }
 
 void __attribute__((constructor))
 dl_entry()
 {
-	JavaVM *jvm;
 	JNIEnv *jni;
 
 	std::cout << "[*] Library loaded!" << std::endl;
@@ -84,6 +80,11 @@ dl_entry()
 	}
 
 	std::cout << "[*] JNIEnv: " << jni << std::endl;
+
+	if (jvm->GetEnv((void **)&jvmti, JVMTI_VERSION_1_0) != JNI_OK) {
+		std::cout << "[!] Failed to retrieve JVMTI environment" << std::endl;
+		return;
+	}
 
 	start(jvm, jni);
 }
