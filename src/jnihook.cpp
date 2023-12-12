@@ -63,7 +63,6 @@ extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *sender
 		int *_access_flags = method.get_field<int>("_access_flags").value();
 		*_access_flags = hkEntry->second._access_flags;
 		jniHookTable.erase(methodAddr);
-		std::cout << "UNHOOK HANDLED!!!" << std::endl;
 		return call_result;
 	}
 
