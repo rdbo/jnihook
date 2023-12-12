@@ -33,7 +33,7 @@ typedef struct {
 	jnihook_callback_t callback;
 	void *_i2i_entry;
 	void *_from_interpreted_entry;
-	void *_from_compiled_entry;
+	// void *_from_compiled_entry;
 	void *arg;
 } jniHookInfo;
 
@@ -41,17 +41,31 @@ static std::unordered_map<void *, jniHookInfo> jniHookTable;
 static JavaVM *jvm = nullptr;
 static jvmtiEnv *jvmti = nullptr;
 
-extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *method, void *senderSP, void *thread)
+extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
 {
 	std::cout << "CALL HANDLER CALLED!" << std::endl;
 
-	auto hkEntry = jniHookTable[method];
+	auto hkEntry = jniHookTable[methodAddr];
 
 	std::cout << "hkEntry arg: " << hkEntry.arg << std::endl;
 
-	hkEntry.callback((jmethodID)&method, senderSP, 0, thread, hkEntry.arg);
+	auto method = VMType::from_instance("Method", methodAddr).value();
+	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
+	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
+
+	std::cout << "restoring original Method to allow for hook call" << std::endl;
+	*_i2i_entry = hkEntry._i2i_entry;
+	*_from_interpreted_entry = hkEntry._from_interpreted_entry;
+
+	std::cout << "calling callback..." << std::endl;
+	hkEntry.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry.arg);
+
+	std::cout << "rehooking method" << std::endl;
+	*_i2i_entry = (void *)jnihook_gateway;
+	*_from_interpreted_entry = (void *)jnihook_gateway;
+
 	
-	return jniHookTable[method]._i2i_entry;
+	return hkEntry._i2i_entry;
 }
 
 extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
@@ -121,17 +135,17 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	// Store hook information
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
-	void **_from_compiled_entry = method.get_field<void *>("_from_compiled_entry").value();
+	// void **_from_compiled_entry = method.get_field<void *>("_from_compiled_entry").value();
 
 	std::cout << "_i2i_entry: " << *_i2i_entry << std::endl;
 	std::cout << "_from_interpreted_entry: " << *_from_interpreted_entry << std::endl;
-	std::cout << "_from_compiled_entry: " << *_from_compiled_entry << std::endl;
+	// std::cout << "_from_compiled_entry: " << *_from_compiled_entry << std::endl;
 
 	jniHookInfo hkInfo = {
 		.callback = callback,
 		._i2i_entry = *_i2i_entry,
 		._from_interpreted_entry = *_from_interpreted_entry,
-		._from_compiled_entry = *_from_compiled_entry,
+		// ._from_compiled_entry = *_from_compiled_entry,
 		.arg = arg
 	};
 
