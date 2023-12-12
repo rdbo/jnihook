@@ -21,6 +21,7 @@
  */
 
 #include <jnihook.h>
+#include <jvmti.h>
 #include "jvm.hpp"
 #include <iostream>
 
@@ -30,11 +31,15 @@ extern "C" void jnihook_gateway();
 
 typedef struct {
 	jnihook_callback_t callback;
-	void *orig_i2i;
+	void *_i2i_entry;
+	void *_from_interpreted_entry;
+	void *_from_compiled_entry;
 	void *arg;
 } jniHookInfo;
 
-std::unordered_map<void *, jniHookInfo> jniHookTable;
+static std::unordered_map<void *, jniHookInfo> jniHookTable;
+static JavaVM *jvm = nullptr;
+static jvmtiEnv *jvmti = nullptr;
 
 extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *method, void *senderSP, void *thread)
 {
@@ -42,12 +47,24 @@ extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *method, void *senderSP, v
 
 	jniHookTable[method].callback((jmethodID)&method, senderSP, 0, thread, jniHookTable[method].arg);
 	
-	return jniHookTable[method].orig_i2i;
+	return jniHookTable[method]._i2i_entry;
 }
 
-extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *jvm)
+extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
 {
-	std::cout << "hello" << std::endl;
+	jint result;
+
+	jvm = vm;
+
+	std::cout << "JNIHook_Init called" << std::endl;
+	if ((result = jvm->GetEnv((void **)&jvmti, JVMTI_VERSION_1_0)) != JNI_OK)
+		return result;
+
+	jvmtiCapabilities capabilities = { .can_retransform_classes = JVMTI_ENABLE };
+	jvmti->AddCapabilities(&capabilities);
+
+	std::cout << "JVMTI initialized" << std::endl;
+	
 	VMTypes::init(gHotSpotVMStructs, gHotSpotVMTypes);
 
 	auto fields = VMTypes::findTypeFields("Method").value();
@@ -61,25 +78,58 @@ extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *jvm)
 	std::cout << "Method Type: " << type << std::endl;
 	std::cout << "Method Size: " << type->size << std::endl;
 
-	return 0;
+	return JNI_OK;
 }
 
 extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg)
 {
+	jint result;
+	
+	if (!jvm || !jvmti)
+		return JNI_ERR;
+
 	std::cout << "method ID: " << mID << std::endl;
+
+	// Force class methods to be interpreted
+	JNIEnv *jni;
+	jclass klass;
+	if ((result = jvm->GetEnv((void **)&jni, JNI_VERSION_1_6)) != JNI_OK)
+		return result;
+	
+	if ((result = jvmti->GetMethodDeclaringClass(mID, &klass)) != JNI_OK)
+		return result;
+
+	jvmti->RetransformClasses(1, &klass);
+
+	jni->DeleteLocalRef(klass);
 
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
 	std::cout << "Method: " << method.get_instance() << std::endl;
 
-	void *original = method.get_field<void *>("_from_interpreted_entry").value();
+	// Prevent method from being compiled
+	int *_access_flags = method.get_field<int>("_access_flags").value();
+	*_access_flags = *_access_flags | JVM_ACC_NOT_C2_COMPILABLE | JVM_ACC_NOT_C1_COMPILABLE | JVM_ACC_NOT_C2_OSR_COMPILABLE;
 
-	std::cout << "_from_interpreted_entry: " << original << std::endl;
+	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
+	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
+	void **_from_compiled_entry = method.get_field<void *>("_from_compiled_entry").value();
 
-	jniHookTable[method.get_instance()].callback = callback;
-	jniHookTable[method.get_instance()].orig_i2i = original;
-	jniHookTable[method.get_instance()].arg = arg;
+	std::cout << "_i2i_entry: " << *_i2i_entry << std::endl;
+	std::cout << "_from_interpreted_entry: " << *_from_interpreted_entry << std::endl;
+	std::cout << "_from_compiled_entry: " << *_from_compiled_entry << std::endl;
 
-	method.set_field<void *>("_from_interpreted_entry", (void *)jnihook_gateway);
+	jniHookInfo hkInfo {
+		.callback = callback,
+		._i2i_entry = *_i2i_entry,
+		._from_interpreted_entry = *_from_interpreted_entry,
+		._from_compiled_entry = *_from_compiled_entry,
+		.arg = arg
+	};
+
+	jniHookTable[method.get_instance()] = hkInfo;
+
+	*_i2i_entry = (void *)jnihook_gateway;
+	*_from_interpreted_entry = (void *)jnihook_gateway;
 
 	return JNI_OK;
 }

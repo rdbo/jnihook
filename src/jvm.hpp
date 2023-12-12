@@ -47,6 +47,13 @@ typedef struct {
 	uint64_t size;
 } VMTypeEntry;
 
+/* AccessFlags */
+enum {
+	JVM_ACC_NOT_C2_COMPILABLE = 0x02000000,
+	JVM_ACC_NOT_C1_COMPILABLE = 0x04000000,
+	JVM_ACC_NOT_C2_OSR_COMPILABLE = 0x08000000
+};
+
 /* Wrappers */
 class VMTypes {
 public:
@@ -90,27 +97,14 @@ public:
 	// VMTypes. If it is found, return successful std::optional
 	static std::optional<VMType> from_instance(const char *typeName, void *instance);
 
-	// helper functions for accessing fields
 	template <typename T>
-	std::optional<T> get_field(const char *fieldName)
+	std::optional<T *> get_field(const char *fieldName)
 	{
 		auto fieldAddress = find_field_address(fieldName);
 		if (!fieldAddress.has_value())
 			return std::nullopt;
 
-		return *(T *)(fieldAddress.value());
-	}
-
-	template <typename T>
-	bool set_field(const char *fieldName, T value)
-	{
-		auto fieldAddress = find_field_address(fieldName);
-		if (!fieldAddress.has_value())
-			return false;
-
-		*(T *)(fieldAddress.value()) = value;
-
-		return true;
+		return reinterpret_cast<T *>(fieldAddress.value());
 	}
 
 	inline void *get_instance()
