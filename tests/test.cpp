@@ -6,7 +6,7 @@ static JavaVM *jvm;
 static jvmtiEnv *jvmti;
 static int callCounter = 0;
 
-jvalue hkMyFunction(jmethodID mID, jvalue *args, size_t nargs, void *thread, void *arg)
+jvalue hkMyFunction(jmethodID mID, jvalue **args, size_t nargs, void *thread, void *arg)
 {
 	std::cout << "hkMyFunction called!" << std::endl;
 
@@ -27,19 +27,20 @@ jvalue hkMyFunction(jmethodID mID, jvalue *args, size_t nargs, void *thread, voi
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 	std::cout << "[*] JNI: " << jni << std::endl;
 
-	jint *mynumber = (jint *)&((void **)args)[1];
-	void *name = (void *)&((void **)args)[0];
+	jvalue *mynumber = args[0];
+	jvalue *name = args[1];
 	std::cout << "[*] mynumber address: " << mynumber << std::endl;
-	std::cout << "[*] mynumber value: " << *mynumber << std::endl;
+	std::cout << "[*] mynumber value: " << mynumber->i << std::endl;
 	std::cout << "[*] name: " << name << std::endl;
-	*mynumber = 1337;
+	std::cout << "[*] name object: " << name->l << std::endl;
+	mynumber->i = 1337;
 
 	// Force call the original function
 	jclass clazz;
 	jvmti->GetMethodDeclaringClass(mID, &clazz);
 	std::cout << "[*] clazz: " << clazz << std::endl;
 	
-	// jint result = jni->CallStaticIntMethod(clazz, mID, 1000, name);
+	// jint result = jni->CallStaticIntMethod(clazz, mID, 1000, name->l);
 	// std::cout << "[*] Forced call result: " << result << std::endl;
 
 	return jvalue { .i = 6969 };
