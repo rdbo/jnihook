@@ -34,10 +34,10 @@ jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, v
 	jvmti->GetMethodDeclaringClass(mID, &clazz);
 	std::cout << "[*] clazz: " << clazz << std::endl;
 	
-	jint result = jni->CallStaticIntMethod(clazz, mID, 69, name);
-	std::cout << "[*] Forced call result: " << result << std::endl;
+	// jint result = jni->CallStaticIntMethod(clazz, mID, 1000, name);
+	// std::cout << "[*] Forced call result: " << result << std::endl;
 
-	return jvalue { 0 };
+	return jvalue { .i = 6969 };
 }
 
 static void start(JavaVM *jvm, JNIEnv *jni)

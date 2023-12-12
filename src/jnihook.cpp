@@ -41,7 +41,7 @@ static std::unordered_map<void *, jniHookInfo> jniHookTable;
 static JavaVM *jvm = nullptr;
 static jvmtiEnv *jvmti = nullptr;
 
-extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
+extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
 {
 	std::cout << "CALL HANDLER CALLED!" << std::endl;
 
@@ -58,14 +58,13 @@ extern "C" JNIHOOK_API void *JNIHook_CallHandler(void *methodAddr, void *senderS
 	*_from_interpreted_entry = hkEntry._from_interpreted_entry;
 
 	std::cout << "calling callback..." << std::endl;
-	hkEntry.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry.arg);
+	jvalue call_result = hkEntry.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry.arg);
 
 	std::cout << "rehooking method" << std::endl;
 	*_i2i_entry = (void *)jnihook_gateway;
 	*_from_interpreted_entry = (void *)jnihook_gateway;
 
-	
-	return hkEntry._i2i_entry;
+	return call_result;
 }
 
 extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)

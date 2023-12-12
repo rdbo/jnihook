@@ -61,8 +61,6 @@ jnihook_gateway:
         pop %rdx
         pop %rcx
         pop %rbx
-
-        # Jump back to original gateway (returned by the call handler)
-        jmp *%rax
+        ret
 
 jnihook_gateway_size: .int . - jnihook_gateway
