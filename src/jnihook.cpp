@@ -47,15 +47,21 @@ extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *sender
 	auto hkEntry = jniHookTable.find(methodAddr);
 
 	auto method = VMType::from_instance("Method", methodAddr).value();
+	void **_constMethod = method.get_field<void *>("_constMethod").value();
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
+
+	// Retrieve _size_of_parameters from ConstMethod
+	auto constMethod = VMType::from_instance("ConstMethod", *_constMethod).value();
+	uint16_t *_size_of_parameters = constMethod.get_field<uint16_t>("_size_of_parameters").value();
+	size_t nparams = (size_t)*_size_of_parameters;
 
 	// Restore original Method to allow for a midhook call
 	*_i2i_entry = hkEntry->second._i2i_entry;
 	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry->second.arg);
+	jvalue call_result = hkEntry->second.callback((jmethodID)&methodAddr, senderSP, nparams, thread, hkEntry->second.arg);
 
 	// Handle scheduled unhook
 	if (hkEntry->second.should_unhook) {
