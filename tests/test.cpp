@@ -4,6 +4,7 @@
 
 static JavaVM *jvm;
 static jvmtiEnv *jvmti;
+static int callCounter = 0;
 
 jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, void *arg)
 {
@@ -14,6 +15,13 @@ jvalue hkMyFunction(jmethodID mID, void *params, size_t nparams, void *thread, v
 	std::cout << "[*] nparams: " << nparams << std::endl;
 	std::cout << "[*] thread: " << thread << std::endl;
 	std::cout << "[*] arg: " << arg << std::endl;
+
+	if (++callCounter >= 3) {
+		JNIHook_Detach(mID);
+		std::cout << "[*] Unhooked method" << std::endl;
+	}
+
+	std::cout << "[*] call counter: " << callCounter << std::endl;
 
 	JNIEnv *jni;
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);

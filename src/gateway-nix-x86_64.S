@@ -61,6 +61,10 @@ jnihook_gateway:
         pop %rdx
         pop %rcx
         pop %rbx
+
+        # Return to the interpreter
+        # NOTE: the return value from the callback
+        # is stored in %rax
         ret
 
 jnihook_gateway_size: .int . - jnihook_gateway

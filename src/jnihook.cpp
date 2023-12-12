@@ -33,7 +33,6 @@ typedef struct {
 	jnihook_callback_t callback;
 	void *_i2i_entry;
 	void *_from_interpreted_entry;
-	// void *_from_compiled_entry;
 	void *arg;
 } jniHookInfo;
 
@@ -43,27 +42,24 @@ static jvmtiEnv *jvmti = nullptr;
 
 extern "C" JNIHOOK_API jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
 {
-	std::cout << "CALL HANDLER CALLED!" << std::endl;
-
 	auto hkEntry = jniHookTable[methodAddr];
-
-	std::cout << "hkEntry arg: " << hkEntry.arg << std::endl;
 
 	auto method = VMType::from_instance("Method", methodAddr).value();
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
-	std::cout << "restoring original Method to allow for hook call" << std::endl;
+	// Restore original Method to allow for a midhook call
 	*_i2i_entry = hkEntry._i2i_entry;
 	*_from_interpreted_entry = hkEntry._from_interpreted_entry;
 
-	std::cout << "calling callback..." << std::endl;
+	// Call the callback and store its return value, which will also be passed back to the interpreter
 	jvalue call_result = hkEntry.callback((jmethodID)&methodAddr, senderSP, 0, thread, hkEntry.arg);
 
-	std::cout << "rehooking method" << std::endl;
+	// Rehook method, so that its next call will fall into the hook
 	*_i2i_entry = (void *)jnihook_gateway;
 	*_from_interpreted_entry = (void *)jnihook_gateway;
 
+	// Return the callback retval to the interpreter
 	return call_result;
 }
 
@@ -71,30 +67,18 @@ extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
 {
 	jint result;
 
-	jvm = vm;
+	jvm = vm; // Store JVM globally for future uses
 
-	std::cout << "JNIHook_Init called" << std::endl;
 	if ((result = jvm->GetEnv((void **)&jvmti, JVMTI_VERSION_1_0)) != JNI_OK)
 		return result;
 
+	// Setup JVMTI so that it can retransform classes (required for disabling compilation and inlining of methods)
 	jvmtiCapabilities capabilities = { .can_retransform_classes = JVMTI_ENABLE };
 	if (jvmti->AddCapabilities(&capabilities) != JVMTI_ERROR_NONE)
 		return JNI_ERR;
 
-	std::cout << "JVMTI initialized" << std::endl;
-	
+	// Generate VM type hashmaps
 	VMTypes::init(gHotSpotVMStructs, gHotSpotVMTypes);
-
-	auto fields = VMTypes::findTypeFields("Method").value();
-	auto field = fields.get()["_from_interpreted_entry"];
-	for (auto fieldEntry : fields.get()) {
-		auto field = fieldEntry.second;
-		std::cout << field->typeString << " " << field->fieldName << " @ " << field->offset << std::endl;
-	}
-
-	auto type = VMTypes::findType("Method").value();
-	std::cout << "Method Type: " << type << std::endl;
-	std::cout << "Method Size: " << type->size << std::endl;
 
 	return JNI_OK;
 }
@@ -106,11 +90,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	if (!jvm || !jvmti)
 		return JNI_ERR;
 
-	std::cout << "method ID: " << mID << std::endl;
-	std::cout << "callback: " << (void *)callback << std::endl;
-	std::cout << "arg: " << arg << std::endl;
-
-	// Force class methods to be interpreted
+	// Force class methods to be interpreted through RetransformClasses
 	JNIEnv *jni;
 	jclass klass;
 	if ((result = jvm->GetEnv((void **)&jni, JNI_VERSION_1_6)) != JNI_OK)
@@ -124,8 +104,8 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 
 	jni->DeleteLocalRef(klass);
 
+	// Retrieve method AFTER RetransformClasses (doing so before might not work!)
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
-	std::cout << "Method: " << method.get_instance() << std::endl;
 
 	// Prevent method from being compiled
 	int *_access_flags = method.get_field<int>("_access_flags").value();
@@ -134,17 +114,11 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	// Store hook information
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
-	// void **_from_compiled_entry = method.get_field<void *>("_from_compiled_entry").value();
-
-	std::cout << "_i2i_entry: " << *_i2i_entry << std::endl;
-	std::cout << "_from_interpreted_entry: " << *_from_interpreted_entry << std::endl;
-	// std::cout << "_from_compiled_entry: " << *_from_compiled_entry << std::endl;
 
 	jniHookInfo hkInfo = {
 		.callback = callback,
 		._i2i_entry = *_i2i_entry,
 		._from_interpreted_entry = *_from_interpreted_entry,
-		// ._from_compiled_entry = *_from_compiled_entry,
 		.arg = arg
 	};
 
@@ -156,3 +130,27 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 
 	return JNI_OK;
 }
+
+JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
+{
+	/*
+	void *methodAddr = *(void **)mID;
+
+	auto hkEntry = jniHookTable.find(methodAddr);
+	if (hkEntry == jniHookTable.end())
+		return JNI_ERR;
+
+	auto method = VMType::from_instance("Method", methodAddr).value();
+	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
+	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
+
+	// Restore original Method
+	*_i2i_entry = hkEntry->second._i2i_entry;
+	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
+
+	// Delete hook entry
+	jniHookTable.erase(methodAddr);
+	*/
+	return JNI_OK;
+}
+
