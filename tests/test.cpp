@@ -34,6 +34,7 @@ jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
 	// Force call the original function
 	mynumber.i = 1337;
 	jstring newName = jni->NewStringUTF("root");
+	// jstring newName = (jstring)&name;
 	
 	jint result = jni->CallStaticIntMethod(dummyClass, myFunctionID, mynumber, newName);
 	std::cout << "[*] Forced call result: " << result << std::endl;
@@ -59,6 +60,8 @@ static void start(JavaVM *jvm, JNIEnv *jni)
 
 	JNIHook_Init(jvm);
 	JNIHook_Attach(myFunctionID, hkMyFunction, (void *)0xdeadbeef);
+
+	std::cout << "[*] Hooked myFunction" << std::endl;
 }
 
 void __attribute__((constructor))

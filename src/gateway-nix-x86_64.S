@@ -22,7 +22,6 @@
 
 .text
 .global jnihook_gateway
-.global jnihook_gateway_size
 .extern JNIHook_CallHandler
 
 jnihook_gateway:
@@ -66,5 +65,3 @@ jnihook_gateway:
         # NOTE: the return value from the callback
         # is stored in %rax
         ret
-
-jnihook_gateway_size: .int . - jnihook_gateway
