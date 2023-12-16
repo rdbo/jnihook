@@ -24,6 +24,7 @@
 #include <jvmti.h>
 #include "jvm.hpp"
 #include <iostream>
+#include <vector>
 
 extern "C" VMStructEntry *gHotSpotVMStructs;
 extern "C" VMTypeEntry *gHotSpotVMTypes;
@@ -57,13 +58,13 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 	size_t nparams = (size_t)*_size_of_parameters;
 
 	// Sort arguments to easier handling during the hook
-	jvalue *args = (jvalue *)malloc(nparams * sizeof(jvalue));
+	std::vector<jvalue> args;
 	for (size_t i = 0; i < nparams; ++i) {
 		// stack layout for nparams == 3:
 		//   - senderSP[2] is arg0
 		//   - senderSP[1] is arg1
 		//   - senderSP[0] is arg2
-		args[i] = ((jvalue *)senderSP)[nparams - 1 - i];
+		args.push_back(((jvalue *)senderSP)[nparams - 1 - i]);
 	}
 
 	// Restore original Method to allow for a midhook call
@@ -71,10 +72,7 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback(args, nparams, thread, hkEntry->second.arg);
-
-	// Free sorted arguments
-	free(args);
+	jvalue call_result = hkEntry->second.callback(args.data(), nparams, thread, hkEntry->second.arg);
 
 	// Handle scheduled unhook
 	if (hkEntry->second.should_unhook) {
