@@ -25,6 +25,9 @@
 .extern JNIHook_CallHandler
 
 jnihook_gateway:
+        # Store pointer to arguments (RSP + wordSize to skip the return address)
+        lea 8(%rsp), %rax
+
         # Back up registers
         push %rbx
         push %rcx
@@ -42,7 +45,7 @@ jnihook_gateway:
 
         # Setup and call the CallHandler
         mov %rbx, %rdi
-        mov %r13, %rsi
+        mov %rax, %rsi
         mov %r15, %rdx
         call JNIHook_CallHandler
 
