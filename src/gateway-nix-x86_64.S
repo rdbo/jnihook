@@ -77,7 +77,23 @@ jnihook_gateway:
 	pop %rcx
 	pop %rbx
 
+	# Restore sender stack pointer
+	# and set up proper return address
+	push %rax
+	push %rbp
+	mov %rsp, %rbp
+
+	mov %r13, %rsp
+	mov 16(%rbp), %rax
+	pushq %rax
+	mov %rbp, %rsp
+	pop %rbp
+	pop %rax
+
 	# Return to the interpreter
 	# NOTE: the return value from the callback
-	# is stored in %rax
-	ret
+	# is stored in %rax, and for floating point
+	# numbers, on %xmm0
+
+	mov %r13, %rsp
+	jmp -8(%rsp)
