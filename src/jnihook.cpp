@@ -31,7 +31,8 @@ extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
 extern "C" void jnihook_gateway();
 
 typedef struct {
-	jclass clazz; // TODO: Attempt to force class to not be 'Retransform'able after first 'RetransformClass' to avoid keeping track of it here
+	// NOTE: you have to dereference the 'jclass' to get a constant result for the method, hence why 'clazz oop' instead of just 'clazz'
+	void *clazzOop; // TODO: Attempt to force class to not be 'Retransform'able after first 'RetransformClass' to avoid keeping track of it here
 	jnihook_callback_t callback;
 	jint _access_flags; // NOTE: AccessFlags is a class, but it only has the 'jint _flags' field, so it can be accessed as 'jint' directly
 	void *_i2i_entry;
@@ -114,8 +115,9 @@ extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
 
 bool IsClassRetransformed(jclass clazz)
 {
+	void *oop = *(void **)clazz;
 	for (const auto &[key, value] : jniHookTable) {
-		if (value.clazz == clazz)
+		if (value.clazzOop == oop)
 			return true;
 	}
 
@@ -168,7 +170,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	jniHookInfo hkInfo = {
-		.clazz = klass,
+		.clazzOop = *(void **)klass,
 		.callback = callback,
 		._access_flags = *_access_flags,
 		._i2i_entry = *_i2i_entry,
