@@ -1,3 +1,10 @@
+ifeq ($(JAVAC),)
+JAVAC := javac
+endif
+
 all:
-	javac dummy/Dummy.java
-	javac dummy/MyClass.java
+	$(JAVAC) dummy/Dummy.java
+	$(JAVAC) dummy/MyClass.java
+
+clean:
+	rm dummy/*.class

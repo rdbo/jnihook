@@ -5,6 +5,8 @@ static JavaVM *jvm;
 static int callCounter = 0;
 static jclass dummyClass;
 static jmethodID myFunctionID;
+static jclass MyClass;
+static jmethodID printNameID;
 
 jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
 {
@@ -43,6 +45,30 @@ jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
 	return jvalue { .i = 6969 };
 }
 
+static jvalue hkPrintName(jvalue *args, size_t nargs, void *thread, void *arg)
+{
+	JNIEnv *jni;
+
+	std::cout << "[*] hkPrintName called!" << std::endl;
+
+	std::cout << "[*] Number of Args: " << nargs << std::endl;
+
+	std::cout << "[*] Args: " << std::endl;
+	std::cout << " - thisptr: " << (void *)(args[0].l) << std::endl;
+	std::cout << " - number: " << args[1].i << std::endl;
+
+	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
+	std::cout << "[*] JNI: " << jni << std::endl;
+
+	std::cout << "[*] Calling original..." << std::endl;
+
+	jni->CallVoidMethod((jobject)&args[0].l, printNameID, 2);
+
+	std::cout << "[*] Original called" << std::endl;
+	
+	return jvalue { 0 };
+}
+
 static void start(JavaVM *jvm, JNIEnv *jni)
 {
 	dummyClass = jni->FindClass("dummy/Dummy");
@@ -59,8 +85,23 @@ static void start(JavaVM *jvm, JNIEnv *jni)
 	}
 	std::cout << "[*] myFunction ID: " << myFunctionID << std::endl;
 
+	MyClass = jni->FindClass("dummy/MyClass");
+	if (!MyClass) {
+		std::cout << "[!] Failed to find MyClass" << std::endl;
+		return;
+	}
+	std::cout << "[*] MyClass: " << MyClass << std::endl;
+
+	printNameID = jni->GetMethodID(MyClass, "printName", "(I)V");
+	if (!printNameID) {
+		std::cout << "[!] Failed to find MyClass::printName" << std::endl;
+		return;
+	}
+	std::cout << "[*] MyClass::printName method ID: " << printNameID << std::endl;
+
 	JNIHook_Init(jvm);
 	JNIHook_Attach(myFunctionID, hkMyFunction, (void *)0xdeadbeef);
+	JNIHook_Attach(printNameID, hkPrintName, NULL);
 
 	std::cout << "[*] Hooked myFunction" << std::endl;
 }
