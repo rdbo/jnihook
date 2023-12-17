@@ -26,8 +26,8 @@
 #include <iostream>
 #include <vector>
 
-extern "C" VMStructEntry *gHotSpotVMStructs;
-extern "C" VMTypeEntry *gHotSpotVMTypes;
+extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
+extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
 extern "C" void jnihook_gateway();
 
 typedef struct {
