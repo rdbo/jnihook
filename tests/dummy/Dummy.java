@@ -8,6 +8,7 @@ public class Dummy {
     }
     
     public static void main(String[] args) {
+        MyClass myObj = new MyClass("myObj");
         System.out.println("Started Dummy Process");
 
         if (args.length == 0) {
@@ -20,6 +21,8 @@ public class Dummy {
         while (true) {
             int result = myFunction(10, "Dummy");
             System.out.println("Result: " + result);
+            System.out.println("MyObject: ");
+            myObj.printName(3);
 
             try {
                 Thread.sleep(1000);
