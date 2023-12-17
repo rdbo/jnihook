@@ -155,7 +155,7 @@ void *RetransformOwnerClass(jmethodID mID)
 	// Clean up
 	jni->DeleteLocalRef(klass);
 
-	return klass;
+	return oop;
 }
 
 extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg)
