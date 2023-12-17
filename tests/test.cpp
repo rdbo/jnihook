@@ -65,8 +65,7 @@ static void start(JavaVM *jvm, JNIEnv *jni)
 	std::cout << "[*] Hooked myFunction" << std::endl;
 }
 
-void __attribute__((constructor))
-dl_entry()
+void *main_thread(void *arg)
 {
 	JNIEnv *jni;
 
@@ -74,17 +73,26 @@ dl_entry()
 
 	if (JNI_GetCreatedJavaVMs(&jvm, 1, NULL) != JNI_OK) {
 		std::cout << "[!] Failed to retrieve JavaVM pointer" << std::endl;
-		return;
+		return arg;
 	}
 
 	std::cout << "[*] JavaVM: " << jvm << std::endl;
 
 	if (jvm->AttachCurrentThread((void **)&jni, NULL) != JNI_OK) {
 		std::cout << "[!] Failed to retrieve JNI environment" << std::endl;
-		return;
+		return arg;
 	}
 
 	std::cout << "[*] JNIEnv: " << jni << std::endl;
 
 	start(jvm, jni);
+
+	return arg;
+}
+
+void __attribute__((constructor))
+dl_entry()
+{
+	pthread_t th;
+	pthread_create(&th, NULL, main_thread, NULL);
 }
