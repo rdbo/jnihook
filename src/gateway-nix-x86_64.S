@@ -55,6 +55,9 @@ jnihook_gateway:
 	
 	call JNIHook_CallHandler
 
+	# Resolve float/double return values
+	movq %rax, %xmm0
+
 	# Restore the stack
 	mov %rbp, %rsp
 
