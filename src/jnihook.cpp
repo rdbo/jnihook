@@ -31,6 +31,7 @@ extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
 extern "C" void jnihook_gateway();
 
 typedef struct {
+	jclass clazz; // TODO: Attempt to force class to not be 'Retransform'able after first 'RetransformClass' to avoid keeping track of it here
 	jnihook_callback_t callback;
 	jint _access_flags; // NOTE: AccessFlags is a class, but it only has the 'jint _flags' field, so it can be accessed as 'jint' directly
 	void *_i2i_entry;
@@ -111,6 +112,41 @@ extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
 	return JNI_OK;
 }
 
+bool IsClassRetransformed(jclass clazz)
+{
+	for (const auto &[key, value] : jniHookTable) {
+		if (value.clazz == clazz)
+			return true;
+	}
+
+	return false;
+}
+
+jclass RetransformOwnerClass(jmethodID mID)
+{
+	jclass klass;
+	JNIEnv *jni;
+
+	// Get method owner class
+	if (jvm->GetEnv((void **)&jni, JNI_VERSION_1_6) != JNI_OK)
+		return NULL;
+	
+	if (jvmti->GetMethodDeclaringClass(mID, &klass) != JVMTI_ERROR_NONE)
+		return NULL;
+
+	// Only retransform if class has not been retransformed yet
+	// (retransforming again will cause the previous hooked to be reset)
+	if (IsClassRetransformed(klass))
+		return klass;
+
+	if (jvmti->RetransformClasses(1, &klass) != JVMTI_ERROR_NONE)
+		return NULL;
+
+	jni->DeleteLocalRef(klass);
+
+	return klass;
+}
+
 extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg)
 {
 	jint result;
@@ -119,18 +155,9 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 		return JNI_ERR;
 
 	// Force class methods to be interpreted through RetransformClasses
-	JNIEnv *jni;
-	jclass klass;
-	if ((result = jvm->GetEnv((void **)&jni, JNI_VERSION_1_6)) != JNI_OK)
-		return result;
-	
-	if (jvmti->GetMethodDeclaringClass(mID, &klass) != JVMTI_ERROR_NONE)
+	jclass klass = RetransformOwnerClass(mID);
+	if (!klass)
 		return JNI_ERR;
-
-	if (jvmti->RetransformClasses(1, &klass) != JVMTI_ERROR_NONE)
-		return JNI_ERR;
-
-	jni->DeleteLocalRef(klass);
 
 	// Retrieve method AFTER RetransformClasses (doing so before might not work!)
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
@@ -141,6 +168,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	jniHookInfo hkInfo = {
+		.clazz = klass,
 		.callback = callback,
 		._access_flags = *_access_flags,
 		._i2i_entry = *_i2i_entry,
