@@ -179,7 +179,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	jniHookInfo hkInfo = {
-		.clazzOop = *(void **)clazzOop,
+		.clazzOop = clazzOop,
 		.callback = callback,
 		._access_flags = *_access_flags,
 		._i2i_entry = *_i2i_entry,
