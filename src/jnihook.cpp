@@ -113,9 +113,8 @@ extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
 	return JNI_OK;
 }
 
-bool IsClassRetransformed(jclass clazz)
+bool IsClassRetransformed(void *oop)
 {
-	void *oop = *(void **)clazz;
 	for (const auto &[key, value] : jniHookTable) {
 		if (value.clazzOop == oop)
 			return true;
@@ -124,10 +123,11 @@ bool IsClassRetransformed(jclass clazz)
 	return false;
 }
 
-jclass RetransformOwnerClass(jmethodID mID)
+void *RetransformOwnerClass(jmethodID mID)
 {
 	jclass klass;
 	JNIEnv *jni;
+	void *oop;
 
 	// Get method owner class
 	if (jvm->GetEnv((void **)&jni, JNI_VERSION_1_6) != JNI_OK)
@@ -136,14 +136,23 @@ jclass RetransformOwnerClass(jmethodID mID)
 	if (jvmti->GetMethodDeclaringClass(mID, &klass) != JVMTI_ERROR_NONE)
 		return NULL;
 
+	// 'jclass'es are unreliable, so get the 'oop' of the class
+	// example: 1 class 'oop' might have many different 'jclass'es in memory
+	// but all the 'jclass'es point to this 'oop'
+	oop = *(void **)klass;
+
 	// Only retransform if class has not been retransformed yet
 	// (retransforming again will cause the previous hooked to be reset)
-	if (IsClassRetransformed(klass))
-		return klass;
+	if (IsClassRetransformed(oop))
+		return oop;
 
 	if (jvmti->RetransformClasses(1, &klass) != JVMTI_ERROR_NONE)
 		return NULL;
 
+	// Get new oop (post retransform)
+	oop = *(void **)klass;
+
+	// Clean up
 	jni->DeleteLocalRef(klass);
 
 	return klass;
@@ -157,8 +166,8 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 		return JNI_ERR;
 
 	// Force class methods to be interpreted through RetransformClasses
-	jclass klass = RetransformOwnerClass(mID);
-	if (!klass)
+	void *clazzOop = RetransformOwnerClass(mID);
+	if (!clazzOop)
 		return JNI_ERR;
 
 	// Retrieve method AFTER RetransformClasses (doing so before might not work!)
@@ -170,7 +179,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	jniHookInfo hkInfo = {
-		.clazzOop = *(void **)klass,
+		.clazzOop = *(void **)clazzOop,
 		.callback = callback,
 		._access_flags = *_access_flags,
 		._i2i_entry = *_i2i_entry,
