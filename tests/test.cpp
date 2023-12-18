@@ -17,7 +17,7 @@ jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t 
 	std::cout << "[*] nargs: " << nargs << std::endl;
 	std::cout << "[*] arg: " << arg << std::endl;
 
-	if (++callCounter >= 3) {
+	if (++callCounter >= 8) {
 		JNIHook_Detach(myFunctionID);
 		std::cout << "[*] Unhooked method" << std::endl;
 	}
