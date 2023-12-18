@@ -37,6 +37,7 @@ extern "C" {
 JNIHOOK_API jint JNIHook_Init(JavaVM *jvm);
 JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg);
 JNIHOOK_API jint JNIHook_Detach(jmethodID mID);
+JNIHOOK_API jint JNIHook_Shutdown();
 
 #ifdef __cplusplus
 }

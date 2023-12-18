@@ -200,7 +200,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	return JNI_OK;
 }
 
-JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
+extern "C" JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
 {
 	void *methodAddr = *(void **)mID;
 
@@ -218,3 +218,13 @@ JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
 	return JNI_OK;
 }
 
+extern "C" JNIHOOK_API jint JNIHook_Shutdown()
+{
+	for (auto it = jniHookTable.cbegin(); it != jniHookTable.cend();) {
+		void *method = it->first;
+		it++;
+		JNIHook_Detach((jmethodID)&method); // WARN: This call will erase the table entry, hence why we increment the iterator beforehand
+	}
+
+	return JNI_OK;
+}

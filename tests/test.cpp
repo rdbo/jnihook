@@ -18,8 +18,10 @@ jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t 
 	std::cout << "[*] arg: " << arg << std::endl;
 
 	if (++callCounter >= 8) {
-		JNIHook_Detach(myFunctionID);
-		std::cout << "[*] Unhooked method" << std::endl;
+		// JNIHook_Detach(myFunctionID);
+		// std::cout << "[*] Unhooked method" << std::endl;
+		JNIHook_Shutdown();
+		std::cout << "[*] Unhooked all methods" << std::endl;
 	}
 
 	std::cout << "[*] call counter: " << callCounter << std::endl;
