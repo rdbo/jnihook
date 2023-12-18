@@ -37,7 +37,6 @@ typedef struct {
 	std::vector<uint8_t> cachedMethod; // Copy of the original method (before the hook)
 	std::vector<uint8_t> callableMethod; // Modified version from the original method, callable from the hook callback
 	void *arg; // Argument passed to the callback
-	int should_unhook;
 } jniHookInfo;
 
 static std::unordered_map<void *, jniHookInfo> jniHookTable;
@@ -46,7 +45,7 @@ static jvmtiEnv *jvmti = nullptr;
 
 extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
 {
-	auto hkEntry = jniHookTable.find(methodAddr);
+	auto hkEntry = jniHookTable[methodAddr];
 
 	auto method = VMType::from_instance("Method", methodAddr).value();
 	void **_constMethod = method.get_field<void *>("_constMethod").value();
@@ -67,7 +66,7 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 	}
 
 	// Generate jmethodID from cachedMethod
-	uint8_t *callableMethodData = hkEntry->second.callableMethod.data();
+	uint8_t *callableMethodData = hkEntry.callableMethod.data();
 	jmethodID callableMethod = (jmethodID)&callableMethodData;
 
 	// Retrieve JNIEnv as a facility for the callback
@@ -75,16 +74,7 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback(jni, callableMethod, args.data(), nparams, hkEntry->second.arg);
-
-	// Handle scheduled unhook
-	if (hkEntry->second.should_unhook) {
-		// Copy cached method back to the Method instance
-		size_t method_size = method.size();
-		memcpy(method.get_instance(), (void *)hkEntry->second.cachedMethod.data(), method_size);
-		jniHookTable.erase(methodAddr);
-		return call_result;
-	}
+	jvalue call_result = hkEntry.callback(jni, callableMethod, args.data(), nparams, hkEntry.arg);
 
 	// Return the callback retval to the interpreter
 	return call_result;
@@ -195,8 +185,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 		.callback = callback,
 		.cachedMethod = cachedMethod,
 		.callableMethod = callableMethod,
-		.arg = arg,
-		.should_unhook = 0
+		.arg = arg
 	};
 
 	jniHookTable[method.get_instance()] = hkInfo;
@@ -219,8 +208,13 @@ JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
 	if (hkEntry == jniHookTable.end())
 		return JNI_ERR;
 
-	hkEntry->second.should_unhook = 1; // Schedule unhook
-	
+	auto method = VMType::from_instance("Method", methodAddr).value();
+
+	// Copy cached original method back to the 'Method' instance
+	size_t method_size = method.size();
+	memcpy(method.get_instance(), (void *)hkEntry->second.cachedMethod.data(), method_size);
+	jniHookTable.erase(methodAddr);
+
 	return JNI_OK;
 }
 
