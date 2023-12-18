@@ -24,7 +24,7 @@ public class Dummy {
         }
     }
     
-    public static void main(String[] args) {
+    public static void main(String[] args) throws InterruptedException {
         System.out.println("Started Dummy Process");
 
         if (args.length == 0) {
@@ -35,6 +35,7 @@ public class Dummy {
         }
 
         int threadCount = 2;
+        Thread[] threads = new Thread[threadCount];
 
         for (int i = 0; i < threadCount; ++i) {
             Thread t = new Thread(new Runnable() {
@@ -42,7 +43,13 @@ public class Dummy {
                     threadRun();
                 }
             });
+
+            threads[i] = t;
             t.start();
+        }
+
+        for (Thread t : threads) {
+            t.join();
         }
     }
 }
