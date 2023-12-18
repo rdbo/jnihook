@@ -4,17 +4,17 @@
 static JavaVM *jvm;
 static int callCounter = 0;
 static jclass dummyClass;
-static jmethodID myFunctionID;
 static jclass MyClass;
-static jmethodID printNameID;
+static jmethodID myFunctionID;
 
-jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
+jvalue hkMyFunction(JNIEnv *jni, jmethodID cachedMethod, jvalue *args, size_t nargs, void *arg)
 {
 	std::cout << "hkMyFunction called!" << std::endl;
 
+	std::cout << "[*] jni: " << jni << std::endl;
+	std::cout << "[*] cachedMethod: " << cachedMethod << std::endl;
 	std::cout << "[*] args: " << args << std::endl;
 	std::cout << "[*] nargs: " << nargs << std::endl;
-	std::cout << "[*] thread: " << thread << std::endl;
 	std::cout << "[*] arg: " << arg << std::endl;
 
 	if (++callCounter >= 3) {
@@ -23,10 +23,6 @@ jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
 	}
 
 	std::cout << "[*] call counter: " << callCounter << std::endl;
-
-	JNIEnv *jni;
-	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
-	std::cout << "[*] JNI: " << jni << std::endl;
 
 	jvalue mynumber = args[0];
 	jvalue name = args[1];
@@ -39,16 +35,14 @@ jvalue hkMyFunction(jvalue *args, size_t nargs, void *thread, void *arg)
 	// jstring newName = (jstring)&name;
 	std::cout << "[*] newName: " << newName << std::endl;
 	
-	jint result = jni->CallStaticIntMethod(dummyClass, myFunctionID, mynumber, newName);
+	jint result = jni->CallStaticIntMethod(dummyClass, cachedMethod, mynumber, newName);
 	std::cout << "[*] Forced call result: " << result << std::endl;
 
 	return jvalue { .i = 6969 };
 }
 
-static jvalue hkPrintName(jvalue *args, size_t nargs, void *thread, void *arg)
+jvalue hkPrintName(JNIEnv *jni, jmethodID cachedMethod, jvalue *args, size_t nargs, void *arg)
 {
-	JNIEnv *jni;
-
 	std::cout << "[*] hkPrintName called!" << std::endl;
 
 	std::cout << "[*] Number of Args: " << nargs << std::endl;
@@ -57,12 +51,11 @@ static jvalue hkPrintName(jvalue *args, size_t nargs, void *thread, void *arg)
 	std::cout << " - thisptr: " << (void *)(args[0].l) << std::endl;
 	std::cout << " - number: " << args[1].i << std::endl;
 
-	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 	std::cout << "[*] JNI: " << jni << std::endl;
 
 	std::cout << "[*] Calling original..." << std::endl;
 
-	jni->CallVoidMethod((jobject)&args[0].l, printNameID, 2);
+	jni->CallVoidMethod((jobject)&args[0].l, cachedMethod, 2);
 
 	std::cout << "[*] Original called" << std::endl;
 	
@@ -92,7 +85,7 @@ static void start(JavaVM *jvm, JNIEnv *jni)
 	}
 	std::cout << "[*] MyClass: " << MyClass << std::endl;
 
-	printNameID = jni->GetMethodID(MyClass, "printName", "(I)V");
+	jmethodID printNameID = jni->GetMethodID(MyClass, "printName", "(I)V");
 	if (!printNameID) {
 		std::cout << "[!] Failed to find MyClass::printName" << std::endl;
 		return;

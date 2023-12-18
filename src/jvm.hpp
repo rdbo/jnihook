@@ -111,6 +111,10 @@ public:
 	{
 		return this->instance;
 	}
+
+	uint64_t size() {
+		return (uint64_t)this->type_entry->size;
+	}
 };
 
 #endif

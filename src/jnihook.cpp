@@ -23,7 +23,7 @@
 #include <jnihook.h>
 #include <jvmti.h>
 #include "jvm.hpp"
-#include <iostream>
+#include <iostream> // TODO: Remove
 #include <vector>
 
 extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
@@ -34,10 +34,8 @@ typedef struct {
 	// NOTE: you have to dereference the 'jclass' to get a constant result for the method, hence why 'clazz oop' instead of just 'clazz'
 	void *clazzOop; // TODO: Attempt to force class to not be 'Retransform'able after first 'RetransformClass' to avoid keeping track of it here
 	jnihook_callback_t callback;
-	jint _access_flags; // NOTE: AccessFlags is a class, but it only has the 'jint _flags' field, so it can be accessed as 'jint' directly
-	void *_i2i_entry;
-	void *_from_interpreted_entry;
-	void *arg;
+	std::vector<uint8_t> cachedMethod; // Copy of the original method (before the hook)
+	void *arg; // Argument passed to the callback
 	int should_unhook;
 } jniHookInfo;
 
@@ -51,8 +49,6 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 
 	auto method = VMType::from_instance("Method", methodAddr).value();
 	void **_constMethod = method.get_field<void *>("_constMethod").value();
-	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
-	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
 	// Retrieve _size_of_parameters from ConstMethod
 	auto constMethod = VMType::from_instance("ConstMethod", *_constMethod).value();
@@ -69,25 +65,25 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 		args.push_back(((jvalue *)senderSP)[nparams - 1 - i]);
 	}
 
-	// Restore original Method to allow for a midhook call
-	*_i2i_entry = hkEntry->second._i2i_entry;
-	*_from_interpreted_entry = hkEntry->second._from_interpreted_entry;
+	// Generate jmethodID from cachedMethod
+	uint8_t *cachedMethodData = hkEntry->second.cachedMethod.data();
+	jmethodID cachedMethod = (jmethodID)&cachedMethodData;
+
+	// Retrieve JNIEnv as a facility for the callback
+	JNIEnv *jni;
+	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback(args.data(), nparams, thread, hkEntry->second.arg);
+	jvalue call_result = hkEntry->second.callback(jni, cachedMethod, args.data(), nparams, hkEntry->second.arg);
 
 	// Handle scheduled unhook
 	if (hkEntry->second.should_unhook) {
-		// Restore access flags
-		jint *_access_flags = method.get_field<jint>("_access_flags").value();
-		*_access_flags = hkEntry->second._access_flags;
+		// Copy cached method back to the Method instance
+		size_t method_size = method.size();
+		memcpy(method.get_instance(), (void *)hkEntry->second.cachedMethod.data(), method_size);
 		jniHookTable.erase(methodAddr);
 		return call_result;
 	}
-
-	// Rehook method, so that its next call will fall into the hook
-	*_i2i_entry = (void *)jnihook_gateway;
-	*_from_interpreted_entry = (void *)jnihook_gateway;
 
 	// Return the callback retval to the interpreter
 	return call_result;
@@ -165,6 +161,8 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	if (!jvm || !jvmti)
 		return JNI_ERR;
 
+	// TODO: Don't hook if is already hooked, or replace the hook properly
+
 	// Force class methods to be interpreted through RetransformClasses
 	void *clazzOop = RetransformOwnerClass(mID);
 	if (!clazzOop)
@@ -172,18 +170,19 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 
 	// Retrieve method AFTER RetransformClasses (doing so before might not work!)
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
+	uint64_t method_size = method.size();
+	auto cachedMethod = std::vector<uint8_t>((uint8_t *)method.get_instance(), &((uint8_t *)method.get_instance())[method_size]);
 
-	// Store hook information
+	// Retrieve important Method fields
 	jint *_access_flags = method.get_field<jint>("_access_flags").value();
 	void **_i2i_entry = method.get_field<void *>("_i2i_entry").value();
 	void **_from_interpreted_entry = method.get_field<void *>("_from_interpreted_entry").value();
 
+	// Store hook information
 	jniHookInfo hkInfo = {
 		.clazzOop = clazzOop,
 		.callback = callback,
-		._access_flags = *_access_flags,
-		._i2i_entry = *_i2i_entry,
-		._from_interpreted_entry = *_from_interpreted_entry,
+		.cachedMethod = cachedMethod,
 		.arg = arg,
 		.should_unhook = 0
 	};
