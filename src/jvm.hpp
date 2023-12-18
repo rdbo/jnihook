@@ -54,6 +54,15 @@ enum {
 	JVM_ACC_NOT_C2_OSR_COMPILABLE = 0x08000000
 };
 
+/* VTable Index */
+enum VtableIndexFlag {
+	itable_index_max = -10,
+	pending_itable_index = -9,
+	invalid_vtable_index = -4,
+	garbage_vtable_index = -3,
+	nonvirtual_vtable_index = -2
+};
+
 /* Wrappers */
 class VMTypes {
 public:

@@ -35,6 +35,7 @@ typedef struct {
 	void *clazzOop; // TODO: Attempt to force class to not be 'Retransform'able after first 'RetransformClass' to avoid keeping track of it here
 	jnihook_callback_t callback;
 	std::vector<uint8_t> cachedMethod; // Copy of the original method (before the hook)
+	std::vector<uint8_t> callableMethod; // Modified version from the original method, callable from the hook callback
 	void *arg; // Argument passed to the callback
 	int should_unhook;
 } jniHookInfo;
@@ -66,15 +67,15 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 	}
 
 	// Generate jmethodID from cachedMethod
-	uint8_t *cachedMethodData = hkEntry->second.cachedMethod.data();
-	jmethodID cachedMethod = (jmethodID)&cachedMethodData;
+	uint8_t *callableMethodData = hkEntry->second.callableMethod.data();
+	jmethodID callableMethod = (jmethodID)&callableMethodData;
 
 	// Retrieve JNIEnv as a facility for the callback
 	JNIEnv *jni;
 	jvm->GetEnv((void **)&jni, JNI_VERSION_1_6);
 
 	// Call the callback and store its return value, which will also be passed back to the interpreter
-	jvalue call_result = hkEntry->second.callback(jni, cachedMethod, args.data(), nparams, hkEntry->second.arg);
+	jvalue call_result = hkEntry->second.callback(jni, callableMethod, args.data(), nparams, hkEntry->second.arg);
 
 	// Handle scheduled unhook
 	if (hkEntry->second.should_unhook) {
@@ -172,6 +173,16 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	auto method = VMType::from_instance("Method", *(void **)mID).value();
 	uint64_t method_size = method.size();
 	auto cachedMethod = std::vector<uint8_t>((uint8_t *)method.get_instance(), &((uint8_t *)method.get_instance())[method_size]);
+	auto callableMethod = cachedMethod;
+
+	// Patch callableMethod so that it becomes callable.
+	// JVM does lookups for non-static methods instead of
+	// calling the 'jmethodID' you give it. This can be
+	// bypassed by setting '_vtable_index' to 'nonvirtual_vtable_index',
+	// where it will call whatever 'Method' you give it.
+	auto callable = VMType::from_instance("Method", (void *)callableMethod.data()).value();
+	int *callable_vtable_index = callable.get_field<int>("_vtable_index").value();
+	*callable_vtable_index = nonvirtual_vtable_index;
 
 	// Retrieve important Method fields
 	jint *_access_flags = method.get_field<jint>("_access_flags").value();
@@ -183,6 +194,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 		.clazzOop = clazzOop,
 		.callback = callback,
 		.cachedMethod = cachedMethod,
+		.callableMethod = callableMethod,
 		.arg = arg,
 		.should_unhook = 0
 	};

@@ -7,12 +7,12 @@ static jclass dummyClass;
 static jclass MyClass;
 static jmethodID myFunctionID;
 
-jvalue hkMyFunction(JNIEnv *jni, jmethodID cachedMethod, jvalue *args, size_t nargs, void *arg)
+jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
 {
 	std::cout << "hkMyFunction called!" << std::endl;
 
 	std::cout << "[*] jni: " << jni << std::endl;
-	std::cout << "[*] cachedMethod: " << cachedMethod << std::endl;
+	std::cout << "[*] callableMethod: " << callableMethod << std::endl;
 	std::cout << "[*] args: " << args << std::endl;
 	std::cout << "[*] nargs: " << nargs << std::endl;
 	std::cout << "[*] arg: " << arg << std::endl;
@@ -35,13 +35,13 @@ jvalue hkMyFunction(JNIEnv *jni, jmethodID cachedMethod, jvalue *args, size_t na
 	// jstring newName = (jstring)&name;
 	std::cout << "[*] newName: " << newName << std::endl;
 	
-	jint result = jni->CallStaticIntMethod(dummyClass, cachedMethod, mynumber, newName);
+	jint result = jni->CallStaticIntMethod(dummyClass, callableMethod, mynumber, newName);
 	std::cout << "[*] Forced call result: " << result << std::endl;
 
 	return jvalue { .i = 6969 };
 }
 
-jvalue hkPrintName(JNIEnv *jni, jmethodID cachedMethod, jvalue *args, size_t nargs, void *arg)
+jvalue hkPrintName(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
 {
 	std::cout << "[*] hkPrintName called!" << std::endl;
 
@@ -55,7 +55,7 @@ jvalue hkPrintName(JNIEnv *jni, jmethodID cachedMethod, jvalue *args, size_t nar
 
 	std::cout << "[*] Calling original..." << std::endl;
 
-	jni->CallVoidMethod((jobject)&args[0].l, cachedMethod, 2);
+	jni->CallVoidMethod((jobject)&args[0].l, callableMethod, 2);
 
 	std::cout << "[*] Original called" << std::endl;
 	
