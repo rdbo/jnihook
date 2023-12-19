@@ -46,7 +46,6 @@ jnihook_gateway PROC
 	; Setup and call the CallHandler
 	mov rcx, rdi
 	mov rdx, rax
-	push r15
 	
 	; Fix stack
 	mov rbp, rsp

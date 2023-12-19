@@ -43,7 +43,7 @@ static std::unordered_map<void *, jniHookInfo> jniHookTable;
 static JavaVM *jvm = nullptr;
 static jvmtiEnv *jvmti = nullptr;
 
-extern "C" jvalue JNIHOOK_CALL JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
+extern "C" jvalue JNIHOOK_CALL JNIHook_CallHandler(void *methodAddr, void *senderSP)
 {
 	auto hkEntry = jniHookTable[methodAddr];
 

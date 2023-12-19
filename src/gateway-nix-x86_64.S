@@ -47,7 +47,6 @@ jnihook_gateway:
 	# Setup the CallHandler arguments
 	mov %rbx, %rdi
 	mov %rax, %rsi
-	mov %r15, %rdx
 
 	# Fix stack
 	mov %rsp, %rbp
