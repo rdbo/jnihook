@@ -16,8 +16,8 @@ Hooking the function `static int myFunction(int mynumber, String name)` from a c
 ```c++
 jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
 {
-  // Print parameters
-  jvalue mynumber = args[0];
+	// Print parameters
+	jvalue mynumber = args[0];
 	jvalue name = args[1];
 	std::cout << "[*] mynumber value: " << mynumber.i << std::endl;
 	std::cout << "[*] name object: " << name.l << std::endl;
