@@ -68,6 +68,7 @@ cmake .. -DCMAKE_CXX_FLAGS="-I \"$JAVA_HOME/include\" -I \"$JAVA_HOME/include/li
 ```
 
 3. Build using `nmake` (Windows) or `make` (*nix):
+
 Windows:
 ```
 nmake
