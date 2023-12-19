@@ -85,7 +85,7 @@ jnihook_gateway:
 
 	mov %r13, %rsp
 	mov 16(%rbp), %rax
-	pushq %rax
+	push %rax
 	mov %rbp, %rsp
 	pop %rbp
 	pop %rax
