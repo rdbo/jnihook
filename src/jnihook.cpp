@@ -65,7 +65,7 @@ extern "C" jvalue JNIHOOK_CALL JNIHook_CallHandler(void *methodAddr, void *sende
 		args.push_back(((jvalue *)senderSP)[nparams - 1 - i]);
 	}
 
-	// Generate jmethodID from cachedMethod
+	// Generate jmethodID from callableMethod
 	uint8_t *callableMethodData = hkEntry.callableMethod.data();
 	jmethodID callableMethod = (jmethodID)&callableMethodData;
 
