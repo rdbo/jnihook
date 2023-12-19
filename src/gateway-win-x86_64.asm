@@ -94,8 +94,8 @@ jnihook_gateway PROC
 	; is stored in rax, and for floating point
 	; numbers, on xmm0
 
-	mov rsp, [r13 - 8]
-	ret
+	mov rsp, r13
+	jmp QWORD PTR [rsp - 8]
 jnihook_gateway ENDP
 
 END
