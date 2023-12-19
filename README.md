@@ -3,9 +3,6 @@
 
 Hook Java methods natively from C/C++
 
-## Discord Server
-[https://discord.com/invite/Qw8jsPD99X](https://discord.com/invite/Qw8jsPD99X)
-
 ## License
 This project is licensed under the `GNU AGPL-3.0`. No later version is allowed.
 
