@@ -49,6 +49,7 @@ jnihook_gateway PROC
 	
 	; Fix stack
 	mov rbp, rsp
+	sub rsp, 32 ; Allocate shadow space (required before x64 calls)
 	and rsp, -16
 	
 	; Call the CallHandler
