@@ -11,6 +11,35 @@ This project is licensed under the `GNU AGPL-3.0`. No later version is allowed.
 
 Read the file `LICENSE` for more information.
 
+## Example
+Hooking the function `static int myFunction(int mynumber, String name)` from a class `Dummy`:
+```c++
+jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
+{
+  // Print parameters
+  jvalue mynumber = args[0];
+	jvalue name = args[1];
+	std::cout << "[*] mynumber value: " << mynumber.i << std::endl;
+	std::cout << "[*] name object: " << name.l << std::endl;
+
+	// Call the original function with 'mynumber' set to '1337'
+	mynumber.i = 1337;
+	jni->CallStaticIntMethod(dummyClass, callableMethod, mynumber, (jstring)&name);
+
+	// Get original function parameters
+	return jvalue { .i = 42 }; // Modify the return value to '42'
+}
+
+void start(JavaVM *jvm, JNIEnv *jni)
+{
+	jclass dummyClass = jni->FindClass("dummy/Dummy");
+	jmethodID myFunctionID = jni->GetStaticMethodID(dummyClass, "myFunction", "(ILjava/lang/String;)I");
+
+	JNIHook_Init(jvm);
+	JNIHook_Attach(myFunctionID, hkMyFunction, NULL);
+}
+```
+
 ## Building
 To build this, you can either compile all the files in `src` into your project, or
 use CMake to build a static library, which can be compiled into your project.
