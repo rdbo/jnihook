@@ -1,4 +1,6 @@
 # JNIHook
+![jnihook-logo](https://raw.githubusercontent.com/rdbo/jnihook/master/LOGO.png)
+
 Hook Java methods natively from C/C++
 
 ## Discord Server
