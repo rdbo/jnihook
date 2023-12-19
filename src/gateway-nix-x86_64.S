@@ -97,4 +97,4 @@ jnihook_gateway:
 	# numbers, on %xmm0
 
 	mov %r13, %rsp
-	jmp -8(%rsp)
+	jmp *-8(%rsp)
