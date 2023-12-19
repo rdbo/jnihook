@@ -43,7 +43,7 @@ static std::unordered_map<void *, jniHookInfo> jniHookTable;
 static JavaVM *jvm = nullptr;
 static jvmtiEnv *jvmti = nullptr;
 
-extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
+extern "C" jvalue JNIHOOK_CALL JNIHook_CallHandler(void *methodAddr, void *senderSP, void *thread)
 {
 	auto hkEntry = jniHookTable[methodAddr];
 
@@ -80,7 +80,7 @@ extern "C" jvalue JNIHook_CallHandler(void *methodAddr, void *senderSP, void *th
 	return call_result;
 }
 
-extern "C" JNIHOOK_API jint JNIHook_Init(JavaVM *vm)
+extern "C" JNIHOOK_API jint JNIHOOK_CALL JNIHook_Init(JavaVM *vm)
 {
 	jint result;
 
@@ -145,7 +145,7 @@ void *RetransformOwnerClass(jmethodID mID)
 	return oop;
 }
 
-extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg)
+extern "C" JNIHOOK_API jint JNIHOOK_CALL JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg)
 {
 	jint result;
 	
@@ -200,7 +200,7 @@ extern "C" JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t cal
 	return JNI_OK;
 }
 
-extern "C" JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
+extern "C" JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jmethodID mID)
 {
 	void *methodAddr = *(void **)mID;
 
@@ -218,7 +218,7 @@ extern "C" JNIHOOK_API jint JNIHook_Detach(jmethodID mID)
 	return JNI_OK;
 }
 
-extern "C" JNIHOOK_API jint JNIHook_Shutdown()
+extern "C" JNIHOOK_API jint JNIHOOK_CALL JNIHook_Shutdown()
 {
 	for (auto it = jniHookTable.cbegin(); it != jniHookTable.cend();) {
 		void *method = it->first;

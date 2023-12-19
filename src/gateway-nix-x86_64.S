@@ -44,7 +44,7 @@ jnihook_gateway:
 	push %r15
 	push %rbp
 
-	# Setup and call the CallHandler
+	# Setup the CallHandler arguments
 	mov %rbx, %rdi
 	mov %rax, %rsi
 	mov %r15, %rdx
@@ -53,6 +53,7 @@ jnihook_gateway:
 	mov %rsp, %rbp
 	and $-16, %rsp
 	
+	# Call the CallHandler
 	call JNIHook_CallHandler
 
 	# Resolve float/double return values

@@ -126,9 +126,29 @@ void *main_thread(void *arg)
 	return arg;
 }
 
+#ifdef _WIN32
+#include <windows.h>
+DWORD WINAPI WinThread(LPVOID lpParameter)
+{
+	main_thread(NULL);
+	return 0;
+}
+
+BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved)
+{
+	switch (dwReason) {
+	case DLL_PROCESS_ATTACH:
+		CreateThread(nullptr, 0, WinThread, nullptr, 0, nullptr);
+		break;
+	}
+	
+	return TRUE;
+}
+#else
 void __attribute__((constructor))
 dl_entry()
 {
 	pthread_t th;
 	pthread_create(&th, NULL, main_thread, NULL);
 }
+#endif

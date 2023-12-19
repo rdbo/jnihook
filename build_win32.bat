@@ -1,0 +1,1 @@
+cmake .. -G "NMake Makefiles" -DCMAKE_CXX_FLAGS="/I \"%JAVA_HOME%\include\" /I \"%JAVA_HOME%\include\win32\"" -DCMAKE_CXX_STANDARD=20 -DJNIHOOK_BUILD_TESTS=ON

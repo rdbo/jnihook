@@ -26,18 +26,22 @@
 #include <jni.h>
 
 #define JNIHOOK_API
-#define JNIHOOK_CALLBACK
+#ifdef _WIN32
+#	define JNIHOOK_CALL __fastcall
+#else
+#	define JNIHOOK_CALL
+#endif
 
-typedef jvalue(JNIHOOK_CALLBACK *jnihook_callback_t)(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg);
+typedef jvalue(JNIHOOK_CALL *jnihook_callback_t)(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-JNIHOOK_API jint JNIHook_Init(JavaVM *jvm);
-JNIHOOK_API jint JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg);
-JNIHOOK_API jint JNIHook_Detach(jmethodID mID);
-JNIHOOK_API jint JNIHook_Shutdown();
+JNIHOOK_API jint JNIHOOK_CALL JNIHook_Init(JavaVM *jvm);
+JNIHOOK_API jint JNIHOOK_CALL JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg);
+JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jmethodID mID);
+JNIHOOK_API jint JNIHOOK_CALL JNIHook_Shutdown();
 
 #ifdef __cplusplus
 }
