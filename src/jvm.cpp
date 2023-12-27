@@ -30,7 +30,7 @@ VMTypes::type_entries_t VMTypes::type_entries;
 
 void VMTypes::init(VMStructEntry *vmstructs, VMTypeEntry *vmtypes)
 {
-	for (int i = 0; vmstructs[i].typeName != NULL; ++i) {
+	for (int i = 0; vmstructs[i].fieldName != NULL; ++i) {
 		auto s = &vmstructs[i];
 		VMTypes::struct_entries[s->typeName][s->fieldName] = s;
 	}
