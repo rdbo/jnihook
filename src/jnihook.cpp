@@ -23,7 +23,6 @@
 #include <jnihook.h>
 #include <jvmti.h>
 #include "jvm.hpp"
-#include <iostream> // TODO: Remove
 #include <vector>
 
 extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
@@ -32,7 +31,7 @@ extern "C" void jnihook_gateway();
 
 typedef struct {
 	// NOTE: you have to dereference the 'jclass' to get a constant result for the method, hence why 'clazz oop' instead of just 'clazz'
-	void *clazzOop; // TODO: Attempt to force class to not be 'Retransform'able after first 'RetransformClass' to avoid keeping track of it here
+	void *clazzOop;
 	jnihook_callback_t callback;
 	std::vector<uint8_t> cachedMethod; // Copy of the original method (before the hook)
 	std::vector<uint8_t> callableMethod; // Modified version from the original method, callable from the hook callback
