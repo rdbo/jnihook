@@ -22,8 +22,9 @@
 
 #include <jnihook.h>
 #include <jvmti.h>
-#include "jvm.hpp"
 #include <vector>
+#include <cstring>
+#include "jvm.hpp"
 
 extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
 extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
