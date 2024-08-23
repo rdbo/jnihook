@@ -24,24 +24,35 @@
 #define JNIHOOK_H
 
 #include <jni.h>
+#include <jvmti.h>
 
 #define JNIHOOK_API
-#ifdef _WIN32
-#	define JNIHOOK_CALL __fastcall
-#else
-#	define JNIHOOK_CALL
-#endif
-
-typedef jvalue(JNIHOOK_CALL *jnihook_callback_t)(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg);
+#define JNIHOOK_CALL
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Init(JavaVM *jvm);
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Attach(jmethodID mID, jnihook_callback_t callback, void *arg);
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jmethodID mID);
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Shutdown();
+typedef struct jnihook_t {
+	JavaVM   *jvm;
+	JNIEnv   *env;
+	jvmtiEnv *jvmti;
+} jnihook_t;
+
+typedef enum {
+	JNIHOOK_OK,
+	JNIHOOK_ERR_JVMTI_CAP
+} jnihook_result_t;
+
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
+JNIHook_Init(JavaVM *jvm, jnihook_t *jnihook);
+
+JNIHOOK_API jint JNIHOOK_CALL
+JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method);
+
+JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID method);
+
+JNIHOOK_API void JNIHOOK_CALL JNIHook_Shutdown(jnihook_t *jnihook);
 
 #ifdef __cplusplus
 }
