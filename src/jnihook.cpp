@@ -59,6 +59,31 @@ get_class_signature(jvmtiEnv *jvmti, jclass clazz)
 	return signature;
 }
 
+static std::string
+get_class_name(JNIEnv *env, jclass clazz)
+{
+	jclass klass = env->FindClass("java/lang/Class");
+	if (!klass)
+		return "";
+
+	jmethodID getName_method = env->GetMethodID(klass, "getName", "()Ljava/lang/String;");
+	if (!getName_method)
+		return "";
+
+	jstring name_obj = reinterpret_cast<jstring>(env->CallObjectMethod(clazz, getName_method));
+	if (!name_obj)
+		return "";
+
+	const char *c_name = env->GetStringUTFChars(name_obj, 0);
+	if (!c_name)
+		return "";
+
+	std::string name = std::string(c_name, &c_name[strlen(c_name)]);
+
+	env->ReleaseStringUTFChars(name_obj, c_name);
+	return name;
+}
+
 static std::unique_ptr<method_info_t>
 get_method_info(jvmtiEnv *jvmti, jmethodID method)
 {
@@ -88,11 +113,11 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 				       jint* new_class_data_len,
 				       unsigned char** new_class_data)
 {
-	auto class_signature = get_class_signature(jvmti_env, class_being_redefined);
+	auto class_name = get_class_name(jni_env, class_being_redefined);
 
 	// If the cache is not hooked, or it is already cached, no point in caching again
-	if (class_signature == "" || g_hooks.find(class_signature) == g_hooks.end() ||
-	    g_class_file_cache.find(class_signature) != g_class_file_cache.end()) {
+	if (class_name == "" || g_hooks.find(class_name) == g_hooks.end() ||
+	    g_class_file_cache.find(class_name) != g_class_file_cache.end()) {
 		return;
 	}
 
@@ -101,7 +126,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	if (!cf)
 		return;
 
-	g_class_file_cache[class_signature] = std::move(cf);
+	g_class_file_cache[class_name] = std::move(cf);
 
 	return;
 }
@@ -154,7 +179,7 @@ JNIHOOK_API jint JNIHOOK_CALL
 JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 {
 	jclass clazz;
-	std::string signature;
+	std::string name;
 	hook_info_t hook_info;
 	jvmtiClassDefinition class_definition;
 
@@ -162,10 +187,11 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
 
-	signature = get_class_signature(jnihook->jvmti, clazz);
-	if (signature.length() == 0) {
-		return JNIHOOK_ERR_JVMTI_OPERATION;
+	name = get_class_name(jnihook->env, clazz);
+	if (name.length() == 0) {
+		return JNIHOOK_ERR_JNI_OPERATION;
 	}
+	std::cout << "CLASS NAME: " << name << std::endl;
 
 	auto method_info = get_method_info(jnihook->jvmti, method);
 	if (!method_info) {
@@ -175,19 +201,37 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	hook_info.method_info = *method_info;
 	hook_info.native_hook_method = native_hook_method;
 
-	g_hooks[signature].push_back(hook_info);
+	g_hooks[name].push_back(hook_info);
 
 	// Force caching of the class being hooked
 	jnihook->jvmti->RetransformClasses(1, &clazz);
 
-	if (g_class_file_cache.find(signature) == g_class_file_cache.end()) {
+	if (g_class_file_cache.find(name) == g_class_file_cache.end()) {
 		return JNIHOOK_ERR_CLASSFILE_CACHE;
 	}
 
-	auto cf = *g_class_file_cache[signature];
+	auto cf = *g_class_file_cache[name];
+
+	auto constant_pool = cf.get_constant_pool();
+
+	// Find desired class index in the constant pool table
+	size_t class_index;
+
+	for (size_t i = 1; i < constant_pool.size(); ++i) {
+		auto &item = constant_pool[i];
+		auto tag = item.bytes[0];
+		if (tag != CONSTANT_Class)
+			continue;
+
+		auto class_ci = reinterpret_cast<CONSTANT_Class_info *>(item.bytes.data());
+		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(class_ci->name_index).bytes.data()
+		);
+
+		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
+	}
 
 	// Patch class file
-	auto constant_pool = cf.get_constant_pool();
 	for (size_t i = 1; i < constant_pool.size(); ++i) {
 		auto &item = constant_pool[i];
 		auto tag = item.bytes[0];
