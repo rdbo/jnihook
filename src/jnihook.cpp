@@ -250,7 +250,8 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		if (!should_hook)
 			continue;
 
-		method.access_flags |= ACC_NATIVE; // Set method to native
+		// Set method to native
+		method.access_flags |= ACC_NATIVE;
 
 		// Remove "Code" attribute
 		for (size_t i = 0; i < method.attributes.size(); ++i) {
