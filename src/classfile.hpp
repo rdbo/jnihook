@@ -223,6 +223,18 @@ public:
 		}
 		
 		ss << "\t]" << std::endl;
+
+		ss << "\taccess_flags: " << access_flags << std::endl;
+		ss << "\tthis_class: " << this_class << std::endl;
+		ss << "\tsuper_class: " << super_class << std::endl;
+		ss << "\tinterfaces_count: " << interfaces_count() << std::endl;
+
+		ss << "\tinterfaces: [ ";
+		for (size_t i = 0; i < interfaces.size(); ++i) {
+			ss << interfaces[i] << " ";
+		}
+		ss << "]" << std::endl;
+
 		ss << "}";
 
 		return ss.str();
@@ -253,6 +265,11 @@ public:
 	{
 		/* From Oracle: "The value of the constant_pool_count item is equal to the number of entries in the constant_pool table plus one" */
 		return this->constant_pool.size() + 1;
+	}
+
+	u2 interfaces_count()
+	{
+		return this->interfaces.size();
 	}
 };
 

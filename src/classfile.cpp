@@ -43,6 +43,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 	std::vector<method_info> methods;
 	std::vector<attribute_info> attributes;
 	u2 constant_pool_count;
+	u2 interfaces_count;
 
 	// Magic
 	cf_read_be(&magic, raw, index);
@@ -246,6 +247,23 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		}
 
 		break;
+	}
+
+	// Access Flags
+	cf_read_be(&access_flags, raw, index);
+
+	// Classes
+	cf_read_be(&this_class, raw, index);
+	cf_read_be(&super_class, raw, index);
+
+	// Interfaces
+	cf_read_be(&interfaces_count, raw, index);
+
+	for (size_t i = 0; i < interfaces_count; ++i) {
+		u2 interface;
+
+		cf_read_be(&interface, raw, index);
+		interfaces.push_back(interface);
 	}
 
 	return std::make_unique<ClassFile>(magic, minor, major, constant_pool, access_flags,
