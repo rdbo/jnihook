@@ -65,7 +65,8 @@ ClassFile::load(const uint8_t *classfile_bytes)
 	u4 magic;
 	u2 minor;
 	u2 major;
-	std::vector<cp_info> constant_pool;
+	cp_info empty_cpi = {{ 0 }};
+	std::vector<cp_info> constant_pool = { empty_cpi };
 	u2 access_flags;
 	u2 this_class;
 	u2 super_class;
@@ -94,7 +95,6 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		u1 tag;
 
 		cf_read_be(&tag, raw, index);
-		std::cout << "INDEX: " << i << " index: " << index << " CURTAG: " << static_cast<int>(tag) << std::endl;
 
 		switch (tag) {
 		case CONSTANT_Class:
@@ -128,9 +128,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 
 				ci.tag = tag;
 				cf_read_be(&ci.class_index, raw, index);
-				std::cout << "CLASSINDEX: " << ci.class_index << std::endl;
 				cf_read_be(&ci.name_and_type_index, raw, index);
-				std::cout << "NAMEANDTYPEINDEX: " << ci.name_and_type_index << std::endl;
 
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
@@ -282,6 +280,14 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		}
 
 		constant_pool.push_back(cpi);
+		/*
+		 * From Oracle: "All 8-byte constants take up two entries in the constant_pool table of the class file.
+		 * If a CONSTANT_Long_info or CONSTANT_Double_info structure is the item in the constant_pool table at
+		 * index n, then the next usable item in the pool is located at index n+2. The constant_pool index n+1
+		 * must be valid but is considered unusable".
+		 */
+		if (tag == CONSTANT_Long || tag == CONSTANT_Double)
+			constant_pool.push_back(empty_cpi);
 	}
 
 	// Access Flags
@@ -397,6 +403,8 @@ ClassFile::bytes()
 		cf_push_be(bytes, &tag);
 
 		switch (tag) {
+		case 0:
+			continue;
 		case CONSTANT_Class:
 			{
 				auto ci = reinterpret_cast<CONSTANT_Class_info *>(cpi.bytes.data());

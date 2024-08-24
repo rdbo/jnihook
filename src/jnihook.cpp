@@ -195,12 +195,10 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 	// Patch class file
 	auto constant_pool = cf.get_constant_pool();
-	for (size_t i = 0; i < constant_pool.size(); ++i) {
-		std::cout << "I: " << i + 1 << std::endl;
+	for (size_t i = 1; i < constant_pool.size(); ++i) {
 		auto &item = constant_pool[i];
 		auto tag = item.bytes[0];
 
-		std::cout << "TAG: " << static_cast<int>(tag) << std::endl;
 		if (tag != CONSTANT_Methodref)
 			continue;
 

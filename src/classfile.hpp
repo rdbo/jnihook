@@ -414,7 +414,7 @@ public:
 
 	inline cp_info &get_constant_pool_item(u2 index)
 	{
-		return this->constant_pool[index - 1];
+		return this->constant_pool[index];
 	}
 };
 
