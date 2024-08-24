@@ -25,6 +25,27 @@ void cf_read_be(T *dest, uint8_t *raw, size_t &index)
 	index += sizeof(T);
 }
 
+template <typename T>
+void cf_push(std::vector<uint8_t> &dest, T *source)
+{
+	uint8_t *ptr = reinterpret_cast<uint8_t *>(source);
+
+	for (int i = 0; i < sizeof(T); ++i) {
+		dest.push_back(ptr[i]);
+	}
+}
+
+
+template <typename T>
+void cf_push_be(std::vector<uint8_t> &dest, T *source)
+{
+	uint8_t *ptr = reinterpret_cast<uint8_t *>(source);
+
+	for (int i = sizeof(T) - 1; i >= 0; --i) {
+		dest.push_back(ptr[i]);
+	}
+}
+
 std::unique_ptr<ClassFile>
 ClassFile::load(const uint8_t *classfile_bytes)
 {
@@ -340,4 +361,18 @@ ClassFile::load(const uint8_t *classfile_bytes)
 	return std::make_unique<ClassFile>(magic, minor, major, constant_pool, access_flags,
 	                                   this_class, super_class, interfaces, fields,
 	                                   methods, attributes);
+}
+
+std::vector<uint8_t>
+ClassFile::bytes()
+{
+	std::vector<uint8_t> bytes = {};
+	u2 constant_pool_count = this->constant_pool_count();
+
+	cf_push_be(bytes, &this->magic);
+	cf_push_be(bytes, &this->minor);
+	cf_push_be(bytes, &this->major);
+	cf_push_be(bytes, &constant_pool_count);
+
+	return bytes;
 }

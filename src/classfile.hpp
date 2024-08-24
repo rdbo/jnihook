@@ -197,14 +197,18 @@ public:
 	static std::unique_ptr<ClassFile>
 	load(const uint8_t *classfile_bytes);
 
-	inline std::string str()
+	std::vector<uint8_t>
+	bytes();
+
+	inline std::string
+	str()
 	{
 		std::stringstream ss;
 
 		ss << "ClassFile {" << std::endl;
 		ss << "\tmagic: " << std::hex << magic << std::dec << std::endl;
 		ss << "\tminor: " << minor << std::endl;
-		ss << "\tmajor: " << minor << std::endl;
+		ss << "\tmajor: " << major << std::endl;
 		ss << "\tconstant_pool_count: " << constant_pool_count() << std::endl;
 		ss << "\tconstant_pool: [" << std::endl;
 

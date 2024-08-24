@@ -30,6 +30,19 @@ void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	auto cf = ClassFile::load(class_data);
 
 	std::cout << cf->str() << std::endl;
+
+	auto bytes = cf->bytes();
+	size_t different_bytes = 0;
+	std::cout << "[*] ClassFile bytes redump (size: " << bytes.size() << ") : [ ";
+	for (size_t i = 0; i < bytes.size(); ++i) {
+		auto b = bytes[i];
+		std::cout << std::hex << static_cast<int>(b) << std::dec << " ";
+		if (b != class_data[i]) {
+			++different_bytes;
+		}
+	}
+	std::cout << "]" << std::endl;
+	std::cout << "[*] Different bytes: " << different_bytes << std::endl;
 }
 
 void
