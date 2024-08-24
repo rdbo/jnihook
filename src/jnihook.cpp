@@ -96,7 +96,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 		return;
 	}
 
-	std::cout << "BYTES: [ ";
+	std::cout << "BYTES (size: " << class_data_len << "): [ ";
 	for (size_t i = 0; i < class_data_len; ++i) {
 		std::cout << std::hex << static_cast<int>(class_data[i]) << std::dec << " ";
 	}
@@ -106,6 +106,24 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	auto cf = ClassFile::load(class_data);
 	if (!cf)
 		return;
+
+	auto bytes = cf->bytes();
+
+	std::cout << "DUMP BYTES (size: " << bytes.size() << "): [ ";
+	for (size_t i = 0; i < bytes.size(); ++i) {
+		std::cout << std::hex << static_cast<int>(bytes[i]) << std::dec << " ";
+	}
+	std::cout << "]" << std::endl;
+	
+
+	size_t diff = 0;
+	for (size_t i = 0; i < bytes.size(); ++i) {
+		if (bytes[i] != class_data[i]) {
+			std::cout << "DIFF AT INDEX: " << i << std::endl;
+			++diff;
+		}
+	}
+	std::cout << "DIFF: (size: " << bytes.size() << "): " << diff << " bytes" << std::endl;
 
 	g_class_file_cache[class_signature] = std::move(cf);
 

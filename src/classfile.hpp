@@ -187,6 +187,7 @@ private:
 	u4 magic;
 	u2 minor;
 	u2 major;
+	size_t constant_pool_count; // Don't trust this value. It is very tricky. Used only for bytes generation.
 	std::vector<cp_info> constant_pool;
 	u2 access_flags;
 	u2 this_class;
@@ -211,7 +212,7 @@ public:
 		ss << "\tmagic: " << std::hex << magic << std::dec << std::endl;
 		ss << "\tminor: " << minor << std::endl;
 		ss << "\tmajor: " << major << std::endl;
-		ss << "\tconstant_pool_count: " << constant_pool_count() << std::endl;
+		ss << "\tconstant_pool_count: " << constant_pool_count << std::endl;
 		ss << "\tconstant_pool: [" << std::endl;
 
 		for (size_t i = 0; i < constant_pool.size(); ++i) {
@@ -365,18 +366,19 @@ public:
 		return ss.str();
 	}
 public:
-	inline ClassFile(u4 magic, u2 minor, u2 major, std::vector<cp_info> constant_pool,
+	inline ClassFile(u4 magic, u2 minor, u2 major, u2 constant_pool_count, std::vector<cp_info> constant_pool,
 	                 u2 access_flags, u2 this_class, u2 super_class,
 	                 std::vector<u2> interfaces, std::vector<field_info> fields,
 	                 std::vector<method_info> methods, std::vector<attribute_info> attributes)
-		: magic(magic), minor(minor), major(major), constant_pool(constant_pool),
-		access_flags(access_flags), this_class(this_class), super_class(super_class),
-		interfaces(interfaces), fields(fields), methods(methods), attributes(attributes)
+		: magic(magic), minor(minor), major(major), constant_pool_count(constant_pool_count),
+		constant_pool(constant_pool), access_flags(access_flags), this_class(this_class),
+		super_class(super_class), interfaces(interfaces), fields(fields), methods(methods), attributes(attributes)
 	{}
 
 	DEFINE_GETTER(magic)
 	DEFINE_GETTER(minor)
 	DEFINE_GETTER(major)
+	DEFINE_GETTER(constant_pool_count)
 	DEFINE_GETTER(constant_pool)
 	DEFINE_GETTER(access_flags)
 	DEFINE_GETTER(this_class)
@@ -385,12 +387,6 @@ public:
 	DEFINE_GETTER(fields)
 	DEFINE_GETTER(methods)
 	DEFINE_GETTER(attributes)
-
-	inline u2 constant_pool_count()
-	{
-		/* From Oracle: "The value of the constant_pool_count item is equal to the number of entries in the constant_pool table plus one" */
-		return this->constant_pool.size() + 1;
-	}
 
 	inline u2 interfaces_count()
 	{

@@ -376,8 +376,8 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		attributes.push_back(ai);
 	}
 
-	return std::make_unique<ClassFile>(magic, minor, major, constant_pool, access_flags,
-	                                   this_class, super_class, interfaces, fields,
+	return std::make_unique<ClassFile>(magic, minor, major, constant_pool_count, constant_pool,
+	                                   access_flags, this_class, super_class, interfaces, fields,
 	                                   methods, attributes);
 }
 
@@ -385,7 +385,7 @@ std::vector<uint8_t>
 ClassFile::bytes()
 {
 	std::vector<uint8_t> bytes = {};
-	u2 constant_pool_count = this->constant_pool_count();
+	u2 constant_pool_count = this->constant_pool_count;
 	u2 interfaces_count = this->interfaces_count();
 	u2 fields_count = this->fields_count();
 	u2 methods_count = this->methods_count();
@@ -400,11 +400,13 @@ ClassFile::bytes()
 		auto &cpi = this->constant_pool[i];
 		u1 tag = cpi.bytes[0];
 
+		// Read comments on 'ClassFile::load' to find out why. Not my fault.
+		if (tag == 0)
+			continue;
+
 		cf_push_be(bytes, &tag);
 
 		switch (tag) {
-		case 0:
-			continue;
 		case CONSTANT_Class:
 			{
 				auto ci = reinterpret_cast<CONSTANT_Class_info *>(cpi.bytes.data());
