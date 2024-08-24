@@ -156,6 +156,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	jclass clazz;
 	std::string signature;
 	hook_info_t hook_info;
+	jvmtiClassDefinition class_definition;
 
 	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -184,6 +185,13 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	}
 
 	auto cf = *g_class_file_cache[signature];
+
+	// Redefine class with modified ClassFile
+	auto cf_bytes = cf.bytes();
+	class_definition.klass = clazz;
+	class_definition.class_byte_count = cf_bytes.size();
+	class_definition.class_bytes = cf_bytes.data();
+	jnihook->jvmti->RedefineClasses(1, &class_definition);
 
 	return JNIHOOK_OK;
 }
