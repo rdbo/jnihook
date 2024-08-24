@@ -286,7 +286,9 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		native_method.fnPtr = hk_info.native_hook_method;
 		native_methods.push_back(native_method);
 	}
-	jnihook->env->RegisterNatives(clazz, native_methods.data(), native_methods.size());
+	if (jnihook->env->RegisterNatives(clazz, native_methods.data(), native_methods.size()) < 0) {
+		return JNIHOOK_ERR_JNI_OPERATION;
+	}
 
 	return JNIHOOK_OK;
 }
