@@ -2,47 +2,10 @@
 #include "../src/classfile.hpp"
 #include <iostream>
 
-void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
-			       JNIEnv* jni_env,
-			       jclass class_being_redefined,
-			       jobject loader,
-			       const char* name,
-			       jobject protection_domain,
-			       jint class_data_len,
-			       const unsigned char* class_data,
-			       jint* new_class_data_len,
-			       unsigned char** new_class_data)
+void JNICALL hk_Dummy_sayHello(JNIEnv *env)
 {
-	std::cout << "[*] ClassFileLoadHook: " << name << std::endl;
-	if (strcmp(name, "dummy/Dummy"))
-		return;
-
-	std::cout << "[*] Raw ClassFile: [ ";
-
-	for (jint i = 0; i < class_data_len; ++i) {
-		std::cout << std::hex << static_cast<int>(class_data[i]) << " "<< std::dec;
-	}
-
-	std::cout << "]" << std::endl;
-
-	std::cout << "[*] Parsing ClassFile (length: " << class_data_len << ")..." << std::endl;
-
-	auto cf = ClassFile::load(class_data);
-
-	std::cout << cf->str() << std::endl;
-
-	auto bytes = cf->bytes();
-	size_t different_bytes = 0;
-	std::cout << "[*] ClassFile bytes redump (size: " << bytes.size() << ") : [ ";
-	for (size_t i = 0; i < bytes.size(); ++i) {
-		auto b = bytes[i];
-		std::cout << std::hex << static_cast<int>(b) << std::dec << " ";
-		if (b != class_data[i]) {
-			++different_bytes;
-		}
-	}
-	std::cout << "]" << std::endl;
-	std::cout << "[*] Different bytes: " << different_bytes << std::endl;
+	std::cout << "Dummy.sayHello hook called!" << std::endl;
+	std::cout << "JNIEnv: " << env << std::endl;
 }
 
 void
@@ -54,6 +17,7 @@ start()
 	jnihook_t jnihook;
 	jvmtiEventCallbacks callbacks = {};
 	jclass clazz;
+	jmethodID sayHello_mid;
 
 	std::cout << "[*] Library loaded!" << std::endl;
 
@@ -71,8 +35,7 @@ start()
 
 	if (auto result = JNIHook_Init(env, &jnihook); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
-		jvm->DetachCurrentThread();
-		return;
+		goto DETACH;
 	}
 
 	std::cout << "[*] Helper: jnihook_t { jvm: " <<
@@ -80,17 +43,20 @@ start()
 		", jvmti: " << jnihook.jvmti << " }" <<
 	std::endl;
 
-	callbacks.ClassFileLoadHook = ClassFileLoadHook;
-	std::cout << "[*] SetEventCallbacks result: " << jnihook.jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks)) << std::endl;
-	std::cout << "[*] SetEventNotificationMode result: " << jnihook.jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) << std::endl;
 	clazz = env->FindClass("dummy/Dummy");
-	std::cout << "[*] Found dummy.Dummy class: " << clazz << std::endl;
-	int retransform_result = jnihook.jvmti->RetransformClasses(1, &clazz);
-	std::cout << "[*] RetransformClasses result: " << retransform_result << std::endl;
-	std::cout << "[*] Class retransformed" << std::endl;
+	std::cout << "[*] Class Dummy.dummy: " << clazz << std::endl;
+
+	sayHello_mid = env->GetStaticMethodID(clazz, "sayHello", "()V");
+	std::cout << "[*] Dummy.sayHello: " << sayHello_mid << std::endl;
+
+	if (auto result = JNIHook_Attach(&jnihook, sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello)); result != JNIHOOK_OK) {
+		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+		goto DETACH;
+	}
 
 	JNIHook_Shutdown(&jnihook);
 
+DETACH:
 	jvm->DetachCurrentThread(); // NOTE: The JNIEnv must live until JNIHook_Shutdown() is called!
 				    //       (or if you won't call JNIHook again).
 }
