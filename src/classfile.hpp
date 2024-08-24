@@ -29,6 +29,8 @@
 #include <string>
 #include <vector>
 
+#define DEFINE_GETTER(field) inline auto &get_##field() { return this->field; }
+
 typedef uint8_t u1;
 typedef uint16_t u2;
 typedef uint32_t u4;
@@ -203,6 +205,24 @@ public:
 		ss << "\tmagic: " << std::hex << magic << std::dec << std::endl;
 		ss << "\tminor: " << minor << std::endl;
 		ss << "\tmajor: " << minor << std::endl;
+		ss << "\tconstant_pool_count: " << constant_pool_count() << std::endl;
+		ss << "\tconstant_pool: [" << std::endl;
+
+		for (size_t i = 0; i < constant_pool.size(); ++i) {
+			auto &cpi = constant_pool[i];
+			u1 tag = 0;
+
+			ss << "\t\t" << (i + 1) << ": {" << std::endl;
+
+			ss << "\t\t\tsize: " << cpi.bytes.size() << std::endl;
+			tag = cpi.bytes[0];
+
+			ss << "\t\t\ttag: " << static_cast<int>(tag) << std::endl;
+
+			ss << "\t\t}," << std::endl;
+		}
+		
+		ss << "\t]" << std::endl;
 		ss << "}";
 
 		return ss.str();
@@ -216,6 +236,24 @@ public:
 		access_flags(access_flags), this_class(this_class), super_class(super_class),
 		interfaces(interfaces), fields(fields), methods(methods), attributes(attributes)
 	{}
+
+	DEFINE_GETTER(magic)
+	DEFINE_GETTER(minor)
+	DEFINE_GETTER(major)
+	DEFINE_GETTER(constant_pool)
+	DEFINE_GETTER(access_flags)
+	DEFINE_GETTER(this_class)
+	DEFINE_GETTER(super_class)
+	DEFINE_GETTER(interfaces)
+	DEFINE_GETTER(fields)
+	DEFINE_GETTER(methods)
+	DEFINE_GETTER(attributes)
+
+	u2 constant_pool_count()
+	{
+		/* From Oracle: "The value of the constant_pool_count item is equal to the number of entries in the constant_pool table plus one" */
+		return this->constant_pool.size() + 1;
+	}
 };
 
 #endif
