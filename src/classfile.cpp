@@ -323,6 +323,21 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		methods.push_back(mi);
 	}
 
+	// Attributes
+	cf_read_be(&attributes_count, raw, index);
+
+	for (size_t i = 0; i < attributes_count; ++i) {
+		attribute_info ai;
+		u4 attribute_length;
+
+		cf_read_be(&ai.attribute_name_index, raw, index);
+		cf_read_be(&attribute_length, raw, index);
+
+		ai.info.resize(attribute_length);
+		cf_read(ai.info.data(), raw, index, attribute_length);
+		attributes.push_back(ai);
+	}
+
 	return std::make_unique<ClassFile>(magic, minor, major, constant_pool, access_flags,
 	                                   this_class, super_class, interfaces, fields,
 	                                   methods, attributes);

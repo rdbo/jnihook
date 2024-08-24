@@ -214,7 +214,7 @@ public:
 
 			ss << "\t\t" << (i + 1) << ": {" << std::endl;
 
-			ss << "\t\t\tsize: " << cpi.bytes.size() << std::endl;
+			// ss << "\t\t\tsize: " << cpi.bytes.size() << std::endl;
 			tag = cpi.bytes[0];
 
 			ss << "\t\t\ttag: " << static_cast<int>(tag) << std::endl;
@@ -270,6 +270,25 @@ public:
 
 		ss << "\t]" << std::endl;
 
+		ss << "\tattributes_count: " << attributes_count() << std::endl;
+		ss << "\tattributes_info: [" << std::endl;
+
+		for (size_t i = 0; i < attributes.size(); ++i) {
+			auto &attribute = attributes[i];
+			ss << "\t\t{" << std::endl;
+			ss << "\t\t\tattribute_name_index: " << attribute.attribute_name_index << std::endl;
+			ss << "\t\t\tattribute_length: " << attribute.info.size() << std::endl;
+			ss << "\t\t\tinfo: [ ";
+			for (size_t j = 0; j < attribute.info.size(); ++j) {
+				ss << std::hex << static_cast<int>(attribute.info[i]) << std::dec << " ";
+			}
+			ss << "]" << std::endl;
+			ss << "\t\t}, " << std::endl;
+		}
+
+		ss << "\t]" << std::endl;
+		
+
 		ss << "}";
 
 		return ss.str();
@@ -315,6 +334,11 @@ public:
 	u2 methods_count()
 	{
 		return this->methods.size();
+	}
+
+	u2 attributes_count()
+	{
+		return this->attributes.size();
 	}
 };
 
