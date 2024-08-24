@@ -196,7 +196,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	// Patch class file
 	auto constant_pool = cf.get_constant_pool();
 	for (size_t i = 0; i < constant_pool.size(); ++i) {
-		std::cout << "I: " << i << std::endl;
+		std::cout << "I: " << i + 1 << std::endl;
 		auto &item = constant_pool[i];
 		auto tag = item.bytes[0];
 
@@ -205,9 +205,13 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 			continue;
 
 		auto methodref = reinterpret_cast<CONSTANT_Methodref_info *>(item.bytes.data());
+		std::cout << "NAME_AND_TYPE_INDEX: " << methodref->name_and_type_index << std::endl;
+
 		auto name_and_type = reinterpret_cast<CONSTANT_NameAndType_info *>(
 			cf.get_constant_pool_item(methodref->name_and_type_index).bytes.data()
 		);
+		std::cout << "NAME_AND_TYPE TAG: " << static_cast<int>(name_and_type->tag) << std::endl;
+
 		auto name = reinterpret_cast<CONSTANT_Utf8_info *>(
 			cf.get_constant_pool_item(name_and_type->name_index).bytes.data()
 		);

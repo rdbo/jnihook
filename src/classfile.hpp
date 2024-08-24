@@ -240,6 +240,18 @@ public:
 					ss << "\t\t\t_name_and_type_index: " << methodref->name_and_type_index << std::endl;
 					break;
 				}
+			case CONSTANT_Long:
+				{
+					uint64_t l;
+					auto info = reinterpret_cast<CONSTANT_Long_info *>(cpi.bytes.data());
+
+					ss << "\t\t\t_high_bytes: " << std::hex << info->high_bytes << std::dec << std::endl;
+					ss << "\t\t\t_low_bytes: " << std::hex << info->low_bytes << std::dec << std::endl;
+					*(&((uint32_t *)&l)[0]) = info->low_bytes;
+					*(&((uint32_t *)&l)[1]) = info->high_bytes;
+					ss << "\t\t\t_value: " << l << std::endl;
+					break;
+				}
 			case CONSTANT_NameAndType:
 				{
 					auto info = reinterpret_cast<CONSTANT_NameAndType_info *>(cpi.bytes.data());

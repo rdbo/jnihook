@@ -1,6 +1,8 @@
 #include "classfile.hpp"
 #include <cstring>
 
+#include <iostream> // TODO: REMOVE
+
 template <typename T>
 void cf_read(T *dest, uint8_t *raw, size_t &index)
 {
@@ -92,6 +94,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		u1 tag;
 
 		cf_read_be(&tag, raw, index);
+		std::cout << "INDEX: " << i << " index: " << index << " CURTAG: " << static_cast<int>(tag) << std::endl;
 
 		switch (tag) {
 		case CONSTANT_Class:
@@ -125,7 +128,9 @@ ClassFile::load(const uint8_t *classfile_bytes)
 
 				ci.tag = tag;
 				cf_read_be(&ci.class_index, raw, index);
+				std::cout << "CLASSINDEX: " << ci.class_index << std::endl;
 				cf_read_be(&ci.name_and_type_index, raw, index);
+				std::cout << "NAMEANDTYPEINDEX: " << ci.name_and_type_index << std::endl;
 
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
