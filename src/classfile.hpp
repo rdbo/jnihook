@@ -24,6 +24,7 @@
 #define _CLASSFILE_HPP_
 
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 typedef uint8_t u1;
@@ -184,12 +185,22 @@ private:
 	u2 access_flags;
 	u2 this_class;
 	u2 super_class;
-	std::vector<uint16_t> interfaces;
+	std::vector<u2> interfaces;
 	std::vector<field_info> fields;
 	std::vector<method_info> methods;
 	std::vector<attribute_info> attributes;
 public:
-	ClassFile(std::vector<uint8_t> &classfile_bytes);
+	static std::unique_ptr<ClassFile>
+	load(std::vector<uint8_t> &classfile_bytes);
+public:
+	inline ClassFile(u4 magic, u2 minor, u2 major, std::vector<cp_info> constant_pool,
+	                 u2 access_flags, u2 this_class, u2 super_class,
+	                 std::vector<u2> interfaces, std::vector<field_info> fields,
+	                 std::vector<method_info> methods, std::vector<attribute_info> attributes)
+		: magic(magic), minor(minor), major(major), constant_pool(constant_pool),
+		access_flags(access_flags), this_class(this_class), super_class(super_class),
+		interfaces(interfaces), fields(fields), methods(methods), attributes(attributes)
+	{}
 };
 
 #endif

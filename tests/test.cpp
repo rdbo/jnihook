@@ -1,6 +1,20 @@
 #include <jnihook.h>
 #include <iostream>
 
+void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
+			       JNIEnv* jni_env,
+			       jclass class_being_redefined,
+			       jobject loader,
+			       const char* name,
+			       jobject protection_domain,
+			       jint class_data_len,
+			       const unsigned char* class_data,
+			       jint* new_class_data_len,
+			       unsigned char** new_class_data)
+{
+	std::cout << "[*] ClassFileLoadHook: " << name << std::endl;
+}
+
 void
 start()
 {
@@ -8,6 +22,8 @@ start()
 	JNIEnv *env;
 	jsize jvm_count;
 	jnihook_t jnihook;
+	jvmtiEventCallbacks callbacks = {};
+	jclass clazz;
 
 	std::cout << "[*] Library loaded!" << std::endl;
 
@@ -25,7 +41,8 @@ start()
 
 	if (auto result = JNIHook_Init(env, &jnihook); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
-		goto DETACH;
+		jvm->DetachCurrentThread();
+		return;
 	}
 
 	std::cout << "[*] Helper: jnihook_t { jvm: " <<
@@ -33,9 +50,17 @@ start()
 		", jvmti: " << jnihook.jvmti << " }" <<
 	std::endl;
 
+	callbacks.ClassFileLoadHook = ClassFileLoadHook;
+	std::cout << "[*] SetEventCallbacks result: " << jnihook.jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks)) << std::endl;
+	std::cout << "[*] SetEventNotificationMode result: " << jnihook.jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) << std::endl;
+	clazz = env->FindClass("dummy/Dummy");
+	std::cout << "[*] Found dummy.Dummy class: " << clazz << std::endl;
+	int retransform_result = jnihook.jvmti->RetransformClasses(1, &clazz);
+	std::cout << "[*] RetransformClasses result: " << retransform_result << std::endl;
+	std::cout << "[*] Class retransformed" << std::endl;
+
 	JNIHook_Shutdown(&jnihook);
 
-DETACH:
 	jvm->DetachCurrentThread(); // NOTE: The JNIEnv must live until JNIHook_Shutdown() is called!
 				    //       (or if you won't call JNIHook again).
 }

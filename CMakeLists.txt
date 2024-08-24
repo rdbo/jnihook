@@ -7,7 +7,7 @@ option(JNIHOOK_BUILD_TESTS "Enable building of tests" OFF)
 
 set(JNIHOOK_DIR "${PROJECT_SOURCE_DIR}/src")
 set(JNIHOOK_INC "${PROJECT_SOURCE_DIR}/include")
-set(JNIHOOK_SRC "${JNIHOOK_DIR}/jnihook.cpp")
+set(JNIHOOK_SRC "${JNIHOOK_DIR}/jnihook.cpp" "${JNIHOOK_DIR}/classfile.cpp")
 
 set(JAVA_INCLUDES "${JAVA_HOME}/include")
 if(${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
