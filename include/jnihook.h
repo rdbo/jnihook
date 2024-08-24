@@ -56,6 +56,7 @@ typedef enum {
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Init(JNIEnv *env, jnihook_t *jnihook);
 
+/* Function signature for native_hook_method: ReturnType (*fnPtr)(JNIEnv *env, jobject objectOrClass, ...); */
 JNIHOOK_API jint JNIHOOK_CALL
 JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method);
 
