@@ -35,6 +35,15 @@ void cf_push(std::vector<uint8_t> &dest, T *source)
 	}
 }
 
+template <typename T>
+void cf_push(std::vector<uint8_t> &dest, T *source, size_t size)
+{
+	uint8_t *ptr = reinterpret_cast<uint8_t *>(source);
+
+	for (size_t i = 0; i < size; ++i) {
+		dest.push_back(ptr[i]);
+	}
+}
 
 template <typename T>
 void cf_push_be(std::vector<uint8_t> &dest, T *source)
@@ -78,9 +87,8 @@ ClassFile::load(const uint8_t *classfile_bytes)
 	// Constant Pool
 	cf_read_be(&constant_pool_count, raw, index);
 
-	cp_info cpi;
-	for (u2 i = 1; i < constant_pool_count; ++i, constant_pool.push_back(cpi)) {
-		cpi.bytes.clear();
+	for (u2 i = 1; i < constant_pool_count; ++i) {
+		cp_info cpi;
 		u1 tag;
 
 		cf_read_be(&tag, raw, index);
@@ -96,7 +104,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Fieldref:
 			{
@@ -109,7 +117,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Methodref:
 			{
@@ -122,7 +130,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_InterfaceMethodref:
 			{
@@ -135,7 +143,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_String:
 			{
@@ -147,7 +155,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Integer:
 			{
@@ -159,7 +167,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Float:
 			{
@@ -171,7 +179,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Long:
 			{
@@ -184,7 +192,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Double:
 			{
@@ -197,7 +205,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_NameAndType:
 			{
@@ -210,7 +218,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_Utf8:
 			{
@@ -224,7 +232,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 				cf_read(&cpi.bytes.data()[sizeof(ci)], raw, index, ci.length);
 
-				continue;
+				break;
 			}
 		case CONSTANT_MethodHandle:
 			{
@@ -237,7 +245,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_MethodType:
 			{
@@ -249,7 +257,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		case CONSTANT_InvokeDynamic:
 			{
@@ -262,14 +270,13 @@ ClassFile::load(const uint8_t *classfile_bytes)
 				cpi.bytes.resize(sizeof(ci));
 				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
 
-				continue;
+				break;
 			}
 		default:
-			// TODO: Log about unknown tag
-			break;
+			return nullptr;
 		}
 
-		break;
+		constant_pool.push_back(cpi);
 	}
 
 	// Access Flags
@@ -368,11 +375,200 @@ ClassFile::bytes()
 {
 	std::vector<uint8_t> bytes = {};
 	u2 constant_pool_count = this->constant_pool_count();
+	u2 interfaces_count = this->interfaces_count();
+	u2 fields_count = this->fields_count();
+	u2 methods_count = this->methods_count();
+	u2 attributes_count = this->attributes_count();
 
 	cf_push_be(bytes, &this->magic);
 	cf_push_be(bytes, &this->minor);
 	cf_push_be(bytes, &this->major);
 	cf_push_be(bytes, &constant_pool_count);
+	for (size_t i = 0; i < this->constant_pool.size(); ++i) {
+		auto &cpi = this->constant_pool[i];
+		u1 tag = cpi.bytes[0];
+
+		cf_push_be(bytes, &tag);
+
+		switch (tag) {
+		case CONSTANT_Class:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Class_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->name_index);
+				
+				break;
+			}
+		case CONSTANT_Fieldref:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Fieldref_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->class_index);
+				cf_push_be(bytes, &ci->name_and_type_index);
+
+				break;
+			}
+		case CONSTANT_Methodref:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Fieldref_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->class_index);
+				cf_push_be(bytes, &ci->name_and_type_index);
+
+				break;
+			}
+		case CONSTANT_InterfaceMethodref:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Fieldref_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->class_index);
+				cf_push_be(bytes, &ci->name_and_type_index);
+
+				break;
+			}
+		case CONSTANT_String:
+			{
+				auto ci = reinterpret_cast<CONSTANT_String_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->string_index);
+
+				break;
+			}
+		case CONSTANT_Integer:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Integer_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->bytes);
+
+				break;
+			}
+		case CONSTANT_Float:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Float_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->bytes);
+
+				break;
+			}
+		case CONSTANT_Long:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Long_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->high_bytes);
+				cf_push_be(bytes, &ci->low_bytes);
+
+				break;
+			}
+		case CONSTANT_Double:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Double_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->high_bytes);
+				cf_push_be(bytes, &ci->low_bytes);
+
+				break;
+			}
+		case CONSTANT_NameAndType:
+			{
+				auto ci = reinterpret_cast<CONSTANT_NameAndType_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->name_index);
+				cf_push_be(bytes, &ci->descriptor_index);
+
+				break;
+			}
+		case CONSTANT_Utf8:
+			{
+				auto ci = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->length);
+				cf_push(bytes, &ci->bytes, ci->length);
+
+				break;
+			}
+		case CONSTANT_MethodHandle:
+			{
+				auto ci = reinterpret_cast<CONSTANT_MethodHandle_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->reference_kind);
+				cf_push_be(bytes, &ci->reference_index);
+
+				break;
+			}
+		case CONSTANT_MethodType:
+			{
+				auto ci = reinterpret_cast<CONSTANT_MethodType_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->descriptor_index);
+
+				break;
+			}
+		case CONSTANT_InvokeDynamic:
+			{
+				auto ci = reinterpret_cast<CONSTANT_InvokeDynamic_info *>(cpi.bytes.data());
+
+				cf_push_be(bytes, &ci->bootstrap_method_attr_index);
+				cf_push_be(bytes, &ci->name_and_type_index);
+
+				break;
+			}
+		}
+	}
+
+	cf_push_be(bytes, &this->access_flags);
+	cf_push_be(bytes, &this->this_class);
+	cf_push_be(bytes, &this->super_class);
+	cf_push_be(bytes, &interfaces_count);
+
+	for (auto interface : this->interfaces) {
+		cf_push_be(bytes, &interface);
+	}
+
+	cf_push_be(bytes, &fields_count);
+
+	for (auto &field : this->fields) {
+		u2 attributes_count = field.attributes.size();
+
+		cf_push_be(bytes, &field.access_flags);
+		cf_push_be(bytes, &field.name_index);
+		cf_push_be(bytes, &field.descriptor_index);
+		cf_push_be(bytes, &attributes_count);
+		for (auto &attr : field.attributes) {
+			u4 attribute_length = attr.info.size();
+
+			cf_push_be(bytes, &attr.attribute_name_index);
+			cf_push_be(bytes, &attribute_length);
+			cf_push(bytes, attr.info.data(), attribute_length);
+		}
+	}
+
+	cf_push_be(bytes, &methods_count);
+
+	for (auto &method : this->methods) {
+		u2 attributes_count = method.attributes.size();
+
+		cf_push_be(bytes, &method.access_flags);
+		cf_push_be(bytes, &method.name_index);
+		cf_push_be(bytes, &method.descriptor_index);
+		cf_push_be(bytes, &attributes_count);
+		for (auto &attr : method.attributes) {
+			u4 attribute_length = attr.info.size();
+
+			cf_push_be(bytes, &attr.attribute_name_index);
+			cf_push_be(bytes, &attribute_length);
+			cf_push(bytes, attr.info.data(), attribute_length);
+		}
+	}
+
+	cf_push_be(bytes, &attributes_count);
+
+	for (auto &attr : this->attributes) {
+		u4 attribute_length = attr.info.size();
+
+		cf_push_be(bytes, &attr.attribute_name_index);
+		cf_push_be(bytes, &attribute_length);
+		cf_push(bytes, attr.info.data(), attribute_length);
+	}
 
 	return bytes;
 }
