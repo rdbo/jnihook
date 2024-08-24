@@ -220,31 +220,10 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 	auto constant_pool = cf.get_constant_pool();
 
-	// Find desired class index in the constant pool table
-	size_t class_index = 0;
-
-	for (size_t i = 1; i < constant_pool.size(); ++i) {
-		auto &item = constant_pool[i];
-		auto tag = item.bytes[0];
-		if (tag != CONSTANT_Class)
-			continue;
-
-		auto class_ci = reinterpret_cast<CONSTANT_Class_info *>(item.bytes.data());
-		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(class_ci->name_index).bytes.data()
-		);
-
-		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
-		if (name == clazz_name) {
-			class_index = i;
-			break;
-		}
-	}
-
-	if (class_index == 0)
-		return JNIHOOK_ERR_PATCH_CLASSFILE;
-
 	// Patch class file
+	// NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
+	//       Method references are not included here
+	//       If the source file has more than one class, they are compiled as separate ClassFiles
 	for (auto &method : cf.get_methods()) {
 		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
 			cf.get_constant_pool_item(method.name_index).bytes.data()
@@ -259,6 +238,28 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 		std::cout << "NAME: " << name << std::endl;
 		std::cout << "DESCRIPTOR: " << descriptor << std::endl;
+
+		if (name != method_info->name || descriptor != method_info->signature)
+			continue;
+
+		std::cout << "MATCH!!!" << std::endl;
+		method.access_flags |= ACC_NATIVE; // Set method to native
+
+		// Remove "Code" attribute
+		for (size_t i = 0; i < method.attributes.size(); ++i) {
+			auto attr = method.attributes[i];
+			auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+				cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
+			);
+			auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
+			std::cout << "ATTR_NAME: " << attr_name << std::endl;
+			if (attr_name == "Code") {
+				method.attributes.erase(method.attributes.begin() + i);
+				break;
+			}
+		}
+
+		break;
 	}
 
 	// Redefine class with modified ClassFile
@@ -266,7 +267,14 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	class_definition.klass = clazz;
 	class_definition.class_byte_count = cf_bytes.size();
 	class_definition.class_bytes = cf_bytes.data();
-	jnihook->jvmti->RedefineClasses(1, &class_definition);
+	if (jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
+		return JNIHOOK_ERR_JVMTI_OPERATION;
+
+	JNINativeMethod native_method;
+	native_method.name = const_cast<char *>(method_info->name.c_str());
+	native_method.signature = const_cast<char *>(method_info->signature.c_str());
+	native_method.fnPtr = native_hook_method;
+	jnihook->env->RegisterNatives(clazz, &native_method, 1);
 
 	return JNIHOOK_OK;
 }

@@ -6,6 +6,12 @@ interface Thing {
     void doNothing();
 }
 
+class AnotherClass {
+    public void alsoDoNothing() {
+        
+    }
+}
+
 public class Dummy implements Thing {
     @Description(value = "This is a field")
     public static int myNumberField = 10;
