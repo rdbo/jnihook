@@ -8,6 +8,12 @@ void JNICALL hk_Dummy_sayHello(JNIEnv *env)
 	std::cout << "JNIEnv: " << env << std::endl;
 }
 
+void JNICALL hk_Dummy_sayHi(JNIEnv *env)
+{
+	std::cout << "Dummy.sayHi hook called!" << std::endl;
+	std::cout << "JNIEnv: " << env << std::endl;
+}
+
 void
 start()
 {
@@ -18,6 +24,7 @@ start()
 	jvmtiEventCallbacks callbacks = {};
 	jclass clazz;
 	jmethodID sayHello_mid;
+	jmethodID sayHi_mid;
 
 	std::cout << "[*] Library loaded!" << std::endl;
 
@@ -49,7 +56,15 @@ start()
 	sayHello_mid = env->GetStaticMethodID(clazz, "sayHello", "()V");
 	std::cout << "[*] Dummy.sayHello: " << sayHello_mid << std::endl;
 
+	sayHi_mid = env->GetStaticMethodID(clazz, "sayHi", "()V");
+	std::cout << "[*] Dummy.sayHi: " << sayHi_mid << std::endl;
+
 	if (auto result = JNIHook_Attach(&jnihook, sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello)); result != JNIHOOK_OK) {
+		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+		goto DETACH;
+	}
+
+	if (auto result = JNIHook_Attach(&jnihook, sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi)); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}

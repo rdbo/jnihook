@@ -20,6 +20,10 @@ public class Dummy implements Thing {
         System.out.println("Hello!!! This is the original function!!!");
     }
 
+    public static void sayHi() {
+        System.out.println("Hi!!! This is the original function!!!");
+    }
+
     public static void main(String[] args) throws InterruptedException {
         System.out.println("Started Dummy Process");
 
@@ -34,6 +38,7 @@ public class Dummy implements Thing {
 
         while (true) {
             sayHello();
+            sayHi();
             Thread.sleep(1000);
         }
     }

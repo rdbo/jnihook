@@ -210,7 +210,8 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	g_hooks[clazz_name].push_back(hook_info);
 
 	// Force caching of the class being hooked
-	jnihook->jvmti->RetransformClasses(1, &clazz);
+	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end())
+		jnihook->jvmti->RetransformClasses(1, &clazz);
 
 	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
 		return JNIHOOK_ERR_CLASSFILE_CACHE;
@@ -236,13 +237,19 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
 		auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
 
-		std::cout << "NAME: " << name << std::endl;
-		std::cout << "DESCRIPTOR: " << descriptor << std::endl;
-
-		if (name != method_info->name || descriptor != method_info->signature)
+		// Check if the current method is a method that should be hooked
+		// TODO: Use hashmap for faster lookup
+		bool should_hook = false;
+		for (auto &hk_info : g_hooks[clazz_name]) {
+			auto &minfo = hk_info.method_info;
+			if (minfo.name == name && minfo.signature == descriptor) {
+				should_hook = true;
+				break;
+			}
+		}
+		if (!should_hook)
 			continue;
 
-		std::cout << "MATCH!!!" << std::endl;
 		method.access_flags |= ACC_NATIVE; // Set method to native
 
 		// Remove "Code" attribute
@@ -252,7 +259,6 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 				cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
 			);
 			auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
-			std::cout << "ATTR_NAME: " << attr_name << std::endl;
 			if (attr_name == "Code") {
 				method.attributes.erase(method.attributes.begin() + i);
 				break;
@@ -270,11 +276,16 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	if (jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 
-	JNINativeMethod native_method;
-	native_method.name = const_cast<char *>(method_info->name.c_str());
-	native_method.signature = const_cast<char *>(method_info->signature.c_str());
-	native_method.fnPtr = native_hook_method;
-	jnihook->env->RegisterNatives(clazz, &native_method, 1);
+	// Register native methods for JVM lookup
+	std::vector<JNINativeMethod> native_methods;
+	for (auto &hk_info : g_hooks[clazz_name]) {
+		JNINativeMethod native_method;
+		native_method.name = const_cast<char *>(hk_info.method_info.name.c_str());
+		native_method.signature = const_cast<char *>(hk_info.method_info.signature.c_str());
+		native_method.fnPtr = hk_info.native_hook_method;
+		native_methods.push_back(native_method);
+	}
+	jnihook->env->RegisterNatives(clazz, native_methods.data(), native_methods.size());
 
 	return JNIHOOK_OK;
 }
