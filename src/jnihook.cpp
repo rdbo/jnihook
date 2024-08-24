@@ -81,6 +81,13 @@ get_class_name(JNIEnv *env, jclass clazz)
 	std::string name = std::string(c_name, &c_name[strlen(c_name)]);
 
 	env->ReleaseStringUTFChars(name_obj, c_name);
+
+	// Replace dots with slashes to match contents of ClassFile
+	for (size_t i = 0; i < name.length(); ++i) {
+		if (name[i] == '.')
+			name[i] = '/';
+	}
+	
 	return name;
 }
 
@@ -179,7 +186,7 @@ JNIHOOK_API jint JNIHOOK_CALL
 JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 {
 	jclass clazz;
-	std::string name;
+	std::string clazz_name;
 	hook_info_t hook_info;
 	jvmtiClassDefinition class_definition;
 
@@ -187,11 +194,10 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
 
-	name = get_class_name(jnihook->env, clazz);
-	if (name.length() == 0) {
+	clazz_name = get_class_name(jnihook->env, clazz);
+	if (clazz_name.length() == 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
-	std::cout << "CLASS NAME: " << name << std::endl;
 
 	auto method_info = get_method_info(jnihook->jvmti, method);
 	if (!method_info) {
@@ -201,21 +207,21 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	hook_info.method_info = *method_info;
 	hook_info.native_hook_method = native_hook_method;
 
-	g_hooks[name].push_back(hook_info);
+	g_hooks[clazz_name].push_back(hook_info);
 
 	// Force caching of the class being hooked
 	jnihook->jvmti->RetransformClasses(1, &clazz);
 
-	if (g_class_file_cache.find(name) == g_class_file_cache.end()) {
+	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
 		return JNIHOOK_ERR_CLASSFILE_CACHE;
 	}
 
-	auto cf = *g_class_file_cache[name];
+	auto cf = *g_class_file_cache[clazz_name];
 
 	auto constant_pool = cf.get_constant_pool();
 
 	// Find desired class index in the constant pool table
-	size_t class_index;
+	size_t class_index = 0;
 
 	for (size_t i = 1; i < constant_pool.size(); ++i) {
 		auto &item = constant_pool[i];
@@ -229,7 +235,14 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		);
 
 		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
+		if (name == clazz_name) {
+			class_index = i;
+			break;
+		}
 	}
+
+	if (class_index == 0)
+		return JNIHOOK_ERR_PATCH_CLASSFILE;
 
 	// Patch class file
 	for (size_t i = 1; i < constant_pool.size(); ++i) {
@@ -255,6 +268,9 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
 		auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
+
+		if (name != method_info->name || descriptor != method_info->signature)
+			continue;
 
 		std::cout << "NAME: " << name << std::endl;
 		std::cout << "DESCRIPTOR: " << descriptor << std::endl;
