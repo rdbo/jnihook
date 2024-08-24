@@ -296,6 +296,33 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		fields.push_back(fi);
 	}
 
+	// Methods
+	cf_read_be(&methods_count, raw, index);
+
+	for (size_t i = 0; i < methods_count; ++i) {
+		method_info mi;
+		u2 attributes_count;
+
+		cf_read_be(&mi.access_flags, raw, index);
+		cf_read_be(&mi.name_index, raw, index);
+		cf_read_be(&mi.descriptor_index, raw, index);
+		cf_read_be(&attributes_count, raw, index);
+
+		attribute_info ai;
+		for (size_t j = 0; j < attributes_count; ++j) {
+			u4 attribute_length;
+
+			cf_read_be(&ai.attribute_name_index, raw, index);
+			cf_read_be(&attribute_length, raw, index);
+
+			ai.info.resize(attribute_length);
+			cf_read(ai.info.data(), raw, index, attribute_length);
+			mi.attributes.push_back(ai);
+		}
+
+		methods.push_back(mi);
+	}
+
 	return std::make_unique<ClassFile>(magic, minor, major, constant_pool, access_flags,
 	                                   this_class, super_class, interfaces, fields,
 	                                   methods, attributes);

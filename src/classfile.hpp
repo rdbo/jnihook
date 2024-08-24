@@ -246,7 +246,25 @@ public:
 			ss << "\t\t\tname_index: " << field.name_index << std::endl;
 			ss << "\t\t\tdescriptor_index: " << field.descriptor_index << std::endl;
 			ss << "\t\t\tattributes_count: " << field.attributes.size() << std::endl;
-			// TODO: Print attributes
+			// TODO: Show attributes
+			ss << "\t\t\tattributes: [ ... ]" << std::endl;
+			ss << "\t\t}, " << std::endl;
+		}
+
+		ss << "\t]" << std::endl;
+
+		ss << "\tmethods_count: " << methods_count() << std::endl;
+		ss << "\tmethods_info: [" << std::endl;
+
+		for (size_t i = 0; i < methods.size(); ++i) {
+			auto &method = methods[i];
+			ss << "\t\t{" << std::endl;
+			ss << "\t\t\taccess_flags: " << method.access_flags << std::endl;
+			ss << "\t\t\tname_index: " << method.name_index << std::endl;
+			ss << "\t\t\tdescriptor_index: " << method.descriptor_index << std::endl;
+			ss << "\t\t\tattributes_count: " << method.attributes.size() << std::endl;
+			// TODO: Show attributes
+			ss << "\t\t\tattributes: [ ... ]" << std::endl;
 			ss << "\t\t}, " << std::endl;
 		}
 
@@ -292,6 +310,11 @@ public:
 	u2 fields_count()
 	{
 		return this->fields.size();
+	}
+
+	u2 methods_count()
+	{
+		return this->methods.size();
 	}
 };
 
