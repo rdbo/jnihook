@@ -87,7 +87,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 	// Constant Pool
 	cf_read_be(&constant_pool_count, raw, index);
 
-	for (u2 i = 1; i < constant_pool_count; ++i) {
+	for (u2 i = 1; i < constant_pool_count - 1; ++i) {
 		cp_info cpi;
 		u1 tag;
 
@@ -384,6 +384,7 @@ ClassFile::bytes()
 	cf_push_be(bytes, &this->minor);
 	cf_push_be(bytes, &this->major);
 	cf_push_be(bytes, &constant_pool_count);
+
 	for (size_t i = 0; i < this->constant_pool.size(); ++i) {
 		auto &cpi = this->constant_pool[i];
 		u1 tag = cpi.bytes[0];

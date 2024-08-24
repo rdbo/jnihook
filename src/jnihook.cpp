@@ -40,8 +40,8 @@ typedef struct hook_info_t {
 } hook_info_t;
 
 // TODO: Make the following globals specific to a jnihook_t without breaking C compat
-static std::unordered_map<std::string, std::vector<hook_info_t>> hooks;
-static std::unordered_map<std::string, ClassFile> class_file_cache;
+static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
+static std::unordered_map<std::string, std::unique_ptr<ClassFile>> g_class_file_cache;
 
 static std::string
 get_class_signature(jvmtiEnv *jvmti, jclass clazz)
@@ -88,9 +88,20 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 				       jint* new_class_data_len,
 				       unsigned char** new_class_data)
 {
-	std::cout << "[*] CALLED CLASS FILE LOAD HOOK" << std::endl;
-	std::cout << "[*] name: " << name << std::endl;
-	std::cout << "[*] class_being_redefined: " << class_being_redefined << std::endl;
+	auto class_signature = get_class_signature(jvmti_env, class_being_redefined);
+
+	// If the cache is not hooked, or it is already cached, no point in caching again
+	if (class_signature == "" || g_hooks.find(class_signature) == g_hooks.end() ||
+	    g_class_file_cache.find(class_signature) != g_class_file_cache.end()) {
+		return;
+	}
+
+	// Cache parsed classfile
+	auto cf = ClassFile::load(class_data);
+	if (!cf)
+		return;
+
+	g_class_file_cache[class_signature] = std::move(cf);
 
 	return;
 }
@@ -144,6 +155,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 {
 	jclass clazz;
 	std::string signature;
+	hook_info_t hook_info;
 
 	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -155,11 +167,23 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	}
 
 	auto method_info = get_method_info(jnihook->jvmti, method);
-	std::cout << "name: " << method_info->name << std::endl;
-	std::cout << "signature: " << method_info->signature << std::endl;
+	if (!method_info) {
+		return JNIHOOK_ERR_JVMTI_OPERATION;
+	}
+
+	hook_info.method_info = *method_info;
+	hook_info.native_hook_method = native_hook_method;
+
+	g_hooks[signature].push_back(hook_info);
 
 	// Force caching of the class being hooked
 	jnihook->jvmti->RetransformClasses(1, &clazz);
+
+	if (g_class_file_cache.find(signature) == g_class_file_cache.end()) {
+		return JNIHOOK_ERR_CLASSFILE_CACHE;
+	}
+
+	auto cf = *g_class_file_cache[signature];
 
 	return JNIHOOK_OK;
 }
