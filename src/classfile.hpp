@@ -358,30 +358,35 @@ public:
 	DEFINE_GETTER(methods)
 	DEFINE_GETTER(attributes)
 
-	u2 constant_pool_count()
+	inline u2 constant_pool_count()
 	{
 		/* From Oracle: "The value of the constant_pool_count item is equal to the number of entries in the constant_pool table plus one" */
 		return this->constant_pool.size() + 1;
 	}
 
-	u2 interfaces_count()
+	inline u2 interfaces_count()
 	{
 		return this->interfaces.size();
 	}
 
-	u2 fields_count()
+	inline u2 fields_count()
 	{
 		return this->fields.size();
 	}
 
-	u2 methods_count()
+	inline u2 methods_count()
 	{
 		return this->methods.size();
 	}
 
-	u2 attributes_count()
+	inline u2 attributes_count()
 	{
 		return this->attributes.size();
+	}
+
+	inline cp_info &get_constant_pool_item(u2 index)
+	{
+		return this->constant_pool[index - 1];
 	}
 };
 

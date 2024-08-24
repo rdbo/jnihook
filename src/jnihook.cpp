@@ -186,6 +186,30 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 	auto cf = *g_class_file_cache[signature];
 
+	// Patch class file
+	auto methods = cf.get_methods();
+	for (size_t i = 0; i < methods.size(); ++i) {
+		auto &method = methods[i];
+		auto name_cpi = cf.get_constant_pool_item(method.name_index);
+		auto descriptor_cpi = cf.get_constant_pool_item(method.descriptor_index);
+		auto tag = name_cpi.bytes[0];
+		std::cout << "name tag: " << static_cast<int>(tag) << std::endl;
+		if (tag != CONSTANT_Utf8)
+			continue;
+
+		auto name = reinterpret_cast<CONSTANT_Utf8_info *>(name_cpi.bytes.data());
+		std::cout << "name: " << name->bytes << std::endl;
+
+		tag = descriptor_cpi.bytes[0];
+		std::cout << "descriptor tag: " << static_cast<int>(tag) << std::endl;
+
+		if (tag != CONSTANT_Utf8)
+			continue;
+
+		auto descriptor = reinterpret_cast<CONSTANT_Utf8_info *>(descriptor_cpi.bytes.data());
+		std::cout << "descriptor: " <<descriptor ->bytes << std::endl;
+	}
+
 	// Redefine class with modified ClassFile
 	auto cf_bytes = cf.bytes();
 	class_definition.klass = clazz;
