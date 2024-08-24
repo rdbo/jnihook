@@ -1,8 +1,6 @@
 #include "classfile.hpp"
 #include <cstring>
 
-#include <iostream> // TODO: REMOVE
-
 template <typename T>
 void cf_read(T *dest, uint8_t *raw, size_t &index)
 {
