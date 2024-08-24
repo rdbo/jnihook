@@ -227,8 +227,8 @@ public:
 			case CONSTANT_Utf8:
 				{
 					CONSTANT_Utf8_info *info = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
-					// TODO: Verify that these strings are null terminated
-					ss << "\t\t\t_content: " << info->bytes << std::endl;
+					std::string utf8 = std::string(info->bytes, &info->bytes[info->length]);
+					ss << "\t\t\t_content: " << utf8 << std::endl;
 					break;
 				}
 			}
@@ -268,7 +268,7 @@ public:
 				ss << "\t\t\t\t\tattribute_length: " << attribute.info.size() << std::endl;
 				ss << "\t\t\t\t\tinfo: [ ";
 				for (size_t k = 0; k < attribute.info.size(); ++k) {
-					ss << std::hex << static_cast<int>(attribute.info[j]) << std::dec << " ";
+					ss << std::hex << static_cast<int>(attribute.info[k]) << std::dec << " ";
 				}
 				ss << "]" << std::endl;
 				ss << "\t\t\t\t}" << std::endl;
@@ -299,7 +299,7 @@ public:
 				ss << "\t\t\t\t\tattribute_length: " << attribute.info.size() << std::endl;
 				ss << "\t\t\t\t\tinfo: [ ";
 				for (size_t k = 0; k < attribute.info.size(); ++k) {
-					ss << std::hex << static_cast<int>(attribute.info[j]) << std::dec << " ";
+					ss << std::hex << static_cast<int>(attribute.info[k]) << std::dec << " ";
 				}
 				ss << "]" << std::endl;
 				ss << "\t\t\t\t}" << std::endl;
