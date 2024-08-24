@@ -2,16 +2,18 @@
 #include "../src/classfile.hpp"
 #include <iostream>
 
-void JNICALL hk_Dummy_sayHello(JNIEnv *env)
+void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
 	std::cout << "Dummy.sayHello hook called!" << std::endl;
 	std::cout << "JNIEnv: " << env << std::endl;
+	std::cout << "Class: " << clazz << std::endl;
 }
 
-void JNICALL hk_Dummy_sayHi(JNIEnv *env)
+void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclazz clazz)
 {
 	std::cout << "Dummy.sayHi hook called!" << std::endl;
 	std::cout << "JNIEnv: " << env << std::endl;
+	std::cout << "Class: " << clazz << std::endl;
 }
 
 void
