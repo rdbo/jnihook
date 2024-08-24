@@ -256,8 +256,21 @@ public:
 			ss << "\t\t\tname_index: " << field.name_index << std::endl;
 			ss << "\t\t\tdescriptor_index: " << field.descriptor_index << std::endl;
 			ss << "\t\t\tattributes_count: " << field.attributes.size() << std::endl;
-			// TODO: Show attributes
-			ss << "\t\t\tattributes: [ ... ]" << std::endl;
+			ss << "\t\t\tattributes: [" << std::endl;
+			for (size_t j = 0; j < field.attributes.size(); ++j) {
+				auto &attribute = field.attributes[j];
+				ss << "\t\t\t\t{" << std::endl;
+				ss << "\t\t\t\t\tattribute_name_index: " << attribute.attribute_name_index << std::endl;
+				ss << "\t\t\t\t\tattribute_length: " << attribute.info.size() << std::endl;
+				ss << "\t\t\t\t\tinfo: [ ";
+				for (size_t k = 0; k < attribute.info.size(); ++k) {
+					ss << std::hex << static_cast<int>(attribute.info[j]) << std::dec << " ";
+				}
+				ss << "]" << std::endl;
+				ss << "\t\t\t\t}" << std::endl;
+			}
+			ss << "\t\t\t]" << std::endl;
+
 			ss << "\t\t}, " << std::endl;
 		}
 
@@ -274,7 +287,21 @@ public:
 			ss << "\t\t\tdescriptor_index: " << method.descriptor_index << std::endl;
 			ss << "\t\t\tattributes_count: " << method.attributes.size() << std::endl;
 			// TODO: Show attributes
-			ss << "\t\t\tattributes: [ ... ]" << std::endl;
+			ss << "\t\t\tattributes: [" << std::endl;
+			for (size_t j = 0; j < method.attributes.size(); ++j) {
+				auto &attribute = method.attributes[j];
+				ss << "\t\t\t\t{" << std::endl;
+				ss << "\t\t\t\t\tattribute_name_index: " << attribute.attribute_name_index << std::endl;
+				ss << "\t\t\t\t\tattribute_length: " << attribute.info.size() << std::endl;
+				ss << "\t\t\t\t\tinfo: [ ";
+				for (size_t k = 0; k < attribute.info.size(); ++k) {
+					ss << std::hex << static_cast<int>(attribute.info[j]) << std::dec << " ";
+				}
+				ss << "]" << std::endl;
+				ss << "\t\t\t\t}" << std::endl;
+			}
+			ss << "\t\t\t]" << std::endl;
+
 			ss << "\t\t}, " << std::endl;
 		}
 
