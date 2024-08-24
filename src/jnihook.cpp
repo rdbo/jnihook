@@ -96,6 +96,12 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 		return;
 	}
 
+	std::cout << "BYTES: [ ";
+	for (size_t i = 0; i < class_data_len; ++i) {
+		std::cout << std::hex << static_cast<int>(class_data[i]) << std::dec << " ";
+	}
+	std::cout << "]" << std::endl;
+
 	// Cache parsed classfile
 	auto cf = ClassFile::load(class_data);
 	if (!cf)
@@ -185,29 +191,40 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	}
 
 	auto cf = *g_class_file_cache[signature];
+	std::cout << cf.str() << std::endl;
 
 	// Patch class file
-	auto methods = cf.get_methods();
-	for (size_t i = 0; i < methods.size(); ++i) {
-		auto &method = methods[i];
-		auto name_cpi = cf.get_constant_pool_item(method.name_index);
-		auto descriptor_cpi = cf.get_constant_pool_item(method.descriptor_index);
-		auto tag = name_cpi.bytes[0];
-		std::cout << "name tag: " << static_cast<int>(tag) << std::endl;
-		if (tag != CONSTANT_Utf8)
+	auto constant_pool = cf.get_constant_pool();
+	for (size_t i = 0; i < constant_pool.size(); ++i) {
+		std::cout << "I: " << i << std::endl;
+		auto &item = constant_pool[i];
+		auto tag = item.bytes[0];
+
+		std::cout << "TAG: " << static_cast<int>(tag) << std::endl;
+		if (tag != CONSTANT_Methodref)
 			continue;
 
-		auto name = reinterpret_cast<CONSTANT_Utf8_info *>(name_cpi.bytes.data());
-		std::cout << "name: " << name->bytes << std::endl;
+		auto methodref = reinterpret_cast<CONSTANT_Methodref_info *>(item.bytes.data());
+		auto name_and_type = reinterpret_cast<CONSTANT_NameAndType_info *>(
+			cf.get_constant_pool_item(methodref->name_and_type_index).bytes.data()
+		);
+		auto name = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(name_and_type->name_index).bytes.data()
+		);
 
-		tag = descriptor_cpi.bytes[0];
-		std::cout << "descriptor tag: " << static_cast<int>(tag) << std::endl;
+		std::cout << "NAME INDEX: " << name_and_type->name_index << std::endl;
+		std::cout << "DESCRIPTOR INDEX: " << name_and_type->descriptor_index << std::endl;
+		
+		std::cout << "NAME TAG: " << static_cast<int>(name->tag) << std::endl;
 
-		if (tag != CONSTANT_Utf8)
-			continue;
+		auto descriptor = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(name_and_type->descriptor_index).bytes.data()
+		);
 
-		auto descriptor = reinterpret_cast<CONSTANT_Utf8_info *>(descriptor_cpi.bytes.data());
-		std::cout << "descriptor: " <<descriptor ->bytes << std::endl;
+		std::cout << "DESCRIPTOR TAG: " << static_cast<int>(descriptor->tag) << std::endl;
+
+		std::cout << "NAME: " << name->bytes << std::endl;
+		std::cout << "descriptor: " << descriptor->bytes << std::endl;
 	}
 
 	// Redefine class with modified ClassFile

@@ -220,7 +220,6 @@ public:
 
 			ss << "\t\t" << (i + 1) << ": {" << std::endl;
 
-			ss << "\t\t\t_size: " << cpi.bytes.size() << std::endl;
 			tag = cpi.bytes[0];
 
 			ss << "\t\t\ttag: " << static_cast<int>(tag) << std::endl;
@@ -230,10 +229,27 @@ public:
 				{
 					CONSTANT_Utf8_info *info = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
 					std::string utf8 = std::string(info->bytes, &info->bytes[info->length]);
-					ss << "\t\t\t_content: " << utf8 << std::endl;
+					ss << "\t\t\t_length: " << info->length << std::endl;
+					ss << "\t\t\t_bytes: " << utf8 << std::endl;
+					break;
+				}
+			case CONSTANT_Methodref:
+				{
+					auto methodref = reinterpret_cast<CONSTANT_Methodref_info *>(cpi.bytes.data());
+					ss << "\t\t\t_class_index: " << methodref->class_index << std::endl;
+					ss << "\t\t\t_name_and_type_index: " << methodref->name_and_type_index << std::endl;
+					break;
+				}
+			case CONSTANT_NameAndType:
+				{
+					auto info = reinterpret_cast<CONSTANT_NameAndType_info *>(cpi.bytes.data());
+					ss << "\t\t\t_name_index: " << info->name_index << std::endl;
+					ss << "\t\t\t_descriptor_index: " << info->descriptor_index << std::endl;
 					break;
 				}
 			}
+
+			ss << "\t\t\t_size: " << cpi.bytes.size() << std::endl;
 
 			ss << "\t\t}," << std::endl;
 		}
