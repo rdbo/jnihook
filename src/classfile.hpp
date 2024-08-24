@@ -228,12 +228,29 @@ public:
 		ss << "\tthis_class: " << this_class << std::endl;
 		ss << "\tsuper_class: " << super_class << std::endl;
 		ss << "\tinterfaces_count: " << interfaces_count() << std::endl;
-
 		ss << "\tinterfaces: [ ";
+
 		for (size_t i = 0; i < interfaces.size(); ++i) {
 			ss << interfaces[i] << " ";
 		}
+
 		ss << "]" << std::endl;
+
+		ss << "\tfields_count: " << fields_count() << std::endl;
+		ss << "\tfields_info: [" << std::endl;
+
+		for (size_t i = 0; i < fields.size(); ++i) {
+			auto &field = fields[i];
+			ss << "\t\t{" << std::endl;
+			ss << "\t\t\taccess_flags: " << field.access_flags << std::endl;
+			ss << "\t\t\tname_index: " << field.name_index << std::endl;
+			ss << "\t\t\tdescriptor_index: " << field.descriptor_index << std::endl;
+			ss << "\t\t\tattributes_count: " << field.attributes.size() << std::endl;
+			// TODO: Print attributes
+			ss << "\t\t}, " << std::endl;
+		}
+
+		ss << "\t]" << std::endl;
 
 		ss << "}";
 
@@ -270,6 +287,11 @@ public:
 	u2 interfaces_count()
 	{
 		return this->interfaces.size();
+	}
+
+	u2 fields_count()
+	{
+		return this->fields.size();
 	}
 };
 

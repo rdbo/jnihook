@@ -1,10 +1,15 @@
 package dummy;
 
+import jdk.jfr.Description;
+
 interface Thing {
     void doNothing();
 }
 
 public class Dummy implements Thing {
+    @Description(value = "This is a field")
+    public static int myNumberField = 10;
+
     public static void main(String[] args) throws InterruptedException {
         System.out.println("Started Dummy Process");
 
