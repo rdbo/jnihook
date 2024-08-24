@@ -40,12 +40,14 @@ typedef struct jnihook_t {
 } jnihook_t;
 
 typedef enum {
-	JNIHOOK_OK,
-	JNIHOOK_ERR_JVMTI_CAP
+	JNIHOOK_OK = 0,
+	JNIHOOK_ERR_GET_JVM,
+	JNIHOOK_ERR_GET_JVMTI,
+	JNIHOOK_ERR_ADD_JVMTI_CAPS,
 } jnihook_result_t;
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Init(JavaVM *jvm, jnihook_t *jnihook);
+JNIHook_Init(JNIEnv *env, jnihook_t *jnihook);
 
 JNIHOOK_API jint JNIHOOK_CALL
 JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method);

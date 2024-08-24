@@ -5,6 +5,7 @@ void
 start()
 {
 	JavaVM *jvm;
+	JNIEnv *env;
 	jsize jvm_count;
 	jnihook_t jnihook;
 
@@ -16,6 +17,27 @@ start()
 	}
 
 	std::cout << "[*] JavaVM: " << jvm << std::endl;
+
+	if (jvm->AttachCurrentThread(reinterpret_cast<void **>(&env), NULL) != JNI_OK) {
+		std::cerr << "[!] Failed to attach current thread to JVM!" << std::endl;
+		return;
+	}
+
+	if (auto result = JNIHook_Init(env, &jnihook); result != JNIHOOK_OK) {
+		std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
+		goto DETACH;
+	}
+
+	std::cout << "[*] Helper: jnihook_t { jvm: " <<
+		jnihook.jvm << ", env: " << jnihook.env <<
+		", jvmti: " << jnihook.jvmti << " }" <<
+	std::endl;
+
+	JNIHook_Shutdown(&jnihook);
+
+DETACH:
+	jvm->DetachCurrentThread(); // NOTE: The JNIEnv must live until JNIHook_Shutdown() is called!
+				    //       (or if you won't call JNIHook again).
 }
 
 #ifdef _WIN32
