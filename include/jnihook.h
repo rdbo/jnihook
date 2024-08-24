@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#ifndef JNIHOOK_H
-#define JNIHOOK_H
+#ifndef _JNIHOOK_H_
+#define _JNIHOOK_H_
 
 #include <jni.h>
 #include <jvmti.h>
