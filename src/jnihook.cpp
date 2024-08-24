@@ -25,15 +25,57 @@
 #include <string>
 #include <vector>
 #include <cstdint>
+#include "classfile.hpp"
 
 #include <iostream> // TODO: Remove
 
+typedef struct method_info_t {
+	std::string name;
+	std::string signature;
+} method_info_t;
+
 typedef struct hook_info_t {
-	
+	method_info_t method_info;
+	void *native_hook_method;
 } hook_info_t;
 
+// TODO: Make the following globals specific to a jnihook_t without breaking C compat
 static std::unordered_map<std::string, std::vector<hook_info_t>> hooks;
-static std::unordered_map<std::string, std::vector<uint8_t>> class_file_cache;
+static std::unordered_map<std::string, ClassFile> class_file_cache;
+
+static std::string
+get_class_signature(jvmtiEnv *jvmti, jclass clazz)
+{
+	char *sig;
+	
+	if (jvmti->GetClassSignature(clazz, &sig, NULL) != JVMTI_ERROR_NONE) {
+		return "";
+	}
+
+	std::string signature = std::string(sig, &sig[strlen(sig)]);
+
+	jvmti->Deallocate(reinterpret_cast<unsigned char *>(sig));
+
+	return signature;
+}
+
+static std::unique_ptr<method_info_t>
+get_method_info(jvmtiEnv *jvmti, jmethodID method)
+{
+	char *name;
+	char *sig;
+	
+	if (jvmti->GetMethodName(method, &name, &sig, NULL) != JVMTI_ERROR_NONE)
+		return nullptr;
+
+	std::string name_str(name, &name[strlen(name)]);
+	std::string signature_str(sig, &sig[strlen(sig)]);
+
+	jvmti->Deallocate(reinterpret_cast<unsigned char *>(name));
+	jvmti->Deallocate(reinterpret_cast<unsigned char *>(sig));
+
+	return std::make_unique<method_info_t>(method_info_t { name_str, signature_str });
+}
 
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 				       JNIEnv* jni_env,
@@ -101,10 +143,23 @@ JNIHOOK_API jint JNIHOOK_CALL
 JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 {
 	jclass clazz;
+	std::string signature;
 
 	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
+
+	signature = get_class_signature(jnihook->jvmti, clazz);
+	if (signature.length() == 0) {
+		return JNIHOOK_ERR_JVMTI_OPERATION;
+	}
+
+	auto method_info = get_method_info(jnihook->jvmti, method);
+	std::cout << "name: " << method_info->name << std::endl;
+	std::cout << "signature: " << method_info->signature << std::endl;
+
+	// Force caching of the class being hooked
+	jnihook->jvmti->RetransformClasses(1, &clazz);
 
 	return JNIHOOK_OK;
 }
