@@ -1,4 +1,5 @@
 #include <jnihook.h>
+#include "../src/classfile.hpp"
 #include <iostream>
 
 void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
@@ -13,6 +14,14 @@ void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
 			       unsigned char** new_class_data)
 {
 	std::cout << "[*] ClassFileLoadHook: " << name << std::endl;
+	if (strcmp(name, "dummy/Dummy"))
+		return;
+
+	std::cout << "[*] Parsing ClassFile..." << std::endl;
+
+	auto cf = ClassFile::load(class_data);
+
+	std::cout << cf->str() << std::endl;
 }
 
 void

@@ -25,6 +25,8 @@
 
 #include <cstdint>
 #include <memory>
+#include <sstream>
+#include <string>
 #include <vector>
 
 typedef uint8_t u1;
@@ -191,7 +193,20 @@ private:
 	std::vector<attribute_info> attributes;
 public:
 	static std::unique_ptr<ClassFile>
-	load(std::vector<uint8_t> &classfile_bytes);
+	load(const uint8_t *classfile_bytes);
+
+	inline std::string str()
+	{
+		std::stringstream ss;
+
+		ss << "ClassFile {" << std::endl;
+		ss << "\tmagic: " << std::hex << magic << std::dec << std::endl;
+		ss << "\tminor: " << minor << std::endl;
+		ss << "\tmajor: " << minor << std::endl;
+		ss << "}";
+
+		return ss.str();
+	}
 public:
 	inline ClassFile(u4 magic, u2 minor, u2 major, std::vector<cp_info> constant_pool,
 	                 u2 access_flags, u2 this_class, u2 super_class,

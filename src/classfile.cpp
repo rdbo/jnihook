@@ -13,15 +13,15 @@ template <typename T>
 void cf_read_be(T *dest, uint8_t *raw, size_t &index)
 {
 	for (size_t i = 0; i < sizeof(T); ++i) {
-		reinterpret_cast<uint8_t *>(dest)[i] = raw[index + i - 1];
+		reinterpret_cast<uint8_t *>(dest)[i] = raw[index + sizeof(T) - i - 1];
 	}
 	index += sizeof(T);
 }
 
 std::unique_ptr<ClassFile>
-ClassFile::load(std::vector<uint8_t> &classfile_bytes)
+ClassFile::load(const uint8_t *classfile_bytes)
 {
-	uint8_t *raw = classfile_bytes.data();
+	uint8_t *raw = const_cast<uint8_t *>(classfile_bytes);
 	size_t index = 0;
 	u4 magic;
 	u2 minor;
@@ -36,7 +36,7 @@ ClassFile::load(std::vector<uint8_t> &classfile_bytes)
 	std::vector<attribute_info> attributes;
 
 	// Magic
-	cf_read(&magic, raw, index);
+	cf_read_be(&magic, raw, index);
 
 	// Version
 	cf_read_be(&minor, raw, index);
