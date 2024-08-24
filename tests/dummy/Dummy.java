@@ -17,6 +17,8 @@ public class Dummy implements Thing {
     public static void main(String[] args) throws InterruptedException {
         System.out.println("Started Dummy Process");
 
+        sayHello();
+
         if (args.length == 0) {
             System.out.println("Missing library path!");
         } else {
@@ -24,9 +26,10 @@ public class Dummy implements Thing {
             System.load(args[0]);
         }
 
-        Thread.sleep(500);
-
-        sayHello();
+        while (true) {
+            sayHello();
+            Thread.sleep(1000);
+        }
     }
 
     public void doNothing() {
