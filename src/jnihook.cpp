@@ -245,32 +245,17 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		return JNIHOOK_ERR_PATCH_CLASSFILE;
 
 	// Patch class file
-	for (size_t i = 1; i < constant_pool.size(); ++i) {
-		auto &item = constant_pool[i];
-		auto tag = item.bytes[0];
-
-		if (tag != CONSTANT_Methodref)
-			continue;
-
-		auto methodref_ci = reinterpret_cast<CONSTANT_Methodref_info *>(item.bytes.data());
-
-		auto name_and_type_ci = reinterpret_cast<CONSTANT_NameAndType_info *>(
-			cf.get_constant_pool_item(methodref_ci->name_and_type_index).bytes.data()
-		);
-
+	for (auto &method : cf.get_methods()) {
 		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(name_and_type_ci->name_index).bytes.data()
+			cf.get_constant_pool_item(method.name_index).bytes.data()
 		);
 
 		auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(name_and_type_ci->descriptor_index).bytes.data()
+			cf.get_constant_pool_item(method.descriptor_index).bytes.data()
 		);
 
 		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
 		auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-
-		if (name != method_info->name || descriptor != method_info->signature)
-			continue;
 
 		std::cout << "NAME: " << name << std::endl;
 		std::cout << "DESCRIPTOR: " << descriptor << std::endl;
