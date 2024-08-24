@@ -17,6 +17,14 @@ void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	if (strcmp(name, "dummy/Dummy"))
 		return;
 
+	std::cout << "[*] Raw ClassFile: [ ";
+
+	for (jint i = 0; i < class_data_len; ++i) {
+		std::cout << std::hex << static_cast<int>(class_data[i]) << " "<< std::dec;
+	}
+
+	std::cout << "]" << std::endl;
+
 	std::cout << "[*] Parsing ClassFile (length: " << class_data_len << ")..." << std::endl;
 
 	auto cf = ClassFile::load(class_data);

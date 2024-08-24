@@ -290,7 +290,7 @@ public:
 			ss << "\t\t\tattribute_length: " << attribute.info.size() << std::endl;
 			ss << "\t\t\tinfo: [ ";
 			for (size_t j = 0; j < attribute.info.size(); ++j) {
-				ss << std::hex << static_cast<int>(attribute.info[i]) << std::dec << " ";
+				ss << std::hex << static_cast<int>(attribute.info[j]) << std::dec << " ";
 			}
 			ss << "]" << std::endl;
 			ss << "\t\t}, " << std::endl;
