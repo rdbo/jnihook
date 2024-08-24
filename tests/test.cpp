@@ -17,7 +17,7 @@ void JNICALL ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	if (strcmp(name, "dummy/Dummy"))
 		return;
 
-	std::cout << "[*] Parsing ClassFile..." << std::endl;
+	std::cout << "[*] Parsing ClassFile (length: " << class_data_len << ")..." << std::endl;
 
 	auto cf = ClassFile::load(class_data);
 
