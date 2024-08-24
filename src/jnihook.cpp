@@ -195,22 +195,25 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		if (tag != CONSTANT_Methodref)
 			continue;
 
-		auto methodref = reinterpret_cast<CONSTANT_Methodref_info *>(item.bytes.data());
+		auto methodref_ci = reinterpret_cast<CONSTANT_Methodref_info *>(item.bytes.data());
 
-		auto name_and_type = reinterpret_cast<CONSTANT_NameAndType_info *>(
-			cf.get_constant_pool_item(methodref->name_and_type_index).bytes.data()
+		auto name_and_type_ci = reinterpret_cast<CONSTANT_NameAndType_info *>(
+			cf.get_constant_pool_item(methodref_ci->name_and_type_index).bytes.data()
 		);
 
-		auto name = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(name_and_type->name_index).bytes.data()
+		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(name_and_type_ci->name_index).bytes.data()
 		);
 
-		auto descriptor = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(name_and_type->descriptor_index).bytes.data()
+		auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(name_and_type_ci->descriptor_index).bytes.data()
 		);
 
-		std::cout << "NAME: " << name->bytes << std::endl;
-		std::cout << "DESCRIPTOR: " << descriptor->bytes << std::endl;
+		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
+		auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
+
+		std::cout << "NAME: " << name << std::endl;
+		std::cout << "DESCRIPTOR: " << descriptor << std::endl;
 	}
 
 	// Redefine class with modified ClassFile
