@@ -214,10 +214,20 @@ public:
 
 			ss << "\t\t" << (i + 1) << ": {" << std::endl;
 
-			// ss << "\t\t\tsize: " << cpi.bytes.size() << std::endl;
+			ss << "\t\t\t_size: " << cpi.bytes.size() << std::endl;
 			tag = cpi.bytes[0];
 
 			ss << "\t\t\ttag: " << static_cast<int>(tag) << std::endl;
+
+			switch (tag) {
+			case CONSTANT_Utf8:
+				{
+					CONSTANT_Utf8_info *info = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
+					// TODO: Verify that these strings are null terminated
+					ss << "\t\t\t_content: " << info->bytes << std::endl;
+					break;
+				}
+			}
 
 			ss << "\t\t}," << std::endl;
 		}
