@@ -88,7 +88,7 @@ ClassFile::load(const uint8_t *classfile_bytes)
 	// Constant Pool
 	cf_read_be(&constant_pool_count, raw, index);
 
-	for (u2 i = 1; i < constant_pool_count - 1; ++i) {
+	for (u2 i = 1; i < constant_pool_count; ++i) {
 		cp_info cpi;
 		u1 tag;
 
@@ -283,8 +283,10 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		 * index n, then the next usable item in the pool is located at index n+2. The constant_pool index n+1
 		 * must be valid but is considered unusable".
 		 */
-		if (tag == CONSTANT_Long || tag == CONSTANT_Double)
+		if (tag == CONSTANT_Long || tag == CONSTANT_Double) {
 			constant_pool.push_back(empty_cpi);
+			++i;
+		}
 	}
 
 	// Access Flags
