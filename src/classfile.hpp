@@ -217,11 +217,12 @@ public:
 
 		for (size_t i = 0; i < constant_pool.size(); ++i) {
 			auto &cpi = constant_pool[i];
-			u1 tag = 0;
+			u1 tag = cpi.bytes[0];
 
-			ss << "\t\t" << (i + 1) << ": {" << std::endl;
+			if (tag == 0)
+				continue;
 
-			tag = cpi.bytes[0];
+			ss << "\t\t" << i << ": {" << std::endl;
 
 			ss << "\t\t\ttag: " << static_cast<int>(tag) << std::endl;
 
