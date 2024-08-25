@@ -144,7 +144,7 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 {
 	JavaVM *jvm;
 	jvmtiEnv *jvmti;
-	jvmtiCapabilities capabilities = { 0 };
+	jvmtiCapabilities capabilities;
 	jvmtiEventCallbacks callbacks = {};
 
 	if (env->GetJavaVM(&jvm) != JNI_OK) {
@@ -227,7 +227,6 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		std::string class_shortname = class_copy_name.substr(class_copy_name.find_last_of('/') + 1);
 		std::string class_copy_source_name = class_shortname + ".java";
 		jclass class_copy;
-		jobject class_loader;
 		auto cf = *g_class_file_cache[clazz_name];
 
 		// Patch source file name (Java will refuse to define the class otherwise)
@@ -297,10 +296,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 		auto class_data = cf.bytes();
 
-		if (jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
-			return JNIHOOK_ERR_JVMTI_OPERATION;
-		
-		class_copy = jnihook->env->DefineClass(class_copy_name.c_str(), class_loader,
+		class_copy = jnihook->env->DefineClass(class_copy_name.c_str(), NULL,
 						       reinterpret_cast<const jbyte *>(class_data.data()),
 						       class_data.size());
 		///* TODO: REMOVE!

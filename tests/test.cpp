@@ -23,7 +23,6 @@ start()
 	JNIEnv *env;
 	jsize jvm_count;
 	jnihook_t jnihook;
-	jvmtiEventCallbacks callbacks = {};
 	jclass clazz;
 	jmethodID sayHello_mid;
 	jmethodID sayHi_mid;
