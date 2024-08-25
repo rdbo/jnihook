@@ -224,7 +224,6 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		case CONSTANT_Utf8:
 			{
 				CONSTANT_Utf8_info ci;
-				size_t size;
 
 				ci.tag = tag;
 				cf_read_be(&ci.length, raw, index);
