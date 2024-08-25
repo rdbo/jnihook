@@ -25,7 +25,6 @@ void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 	std::cout << "Class: " << clazz << std::endl;
 }
 
-// TODO: Fix getter hook
 jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
 {
 	std::cout << "-> GETNUMBER " << std::endl;
