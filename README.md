@@ -50,6 +50,8 @@ The steps ahead are for building a static library with CMake.
 1. Setup your `JAVA_HOME` environment variable. It will be used for accessing `jni.h`, `jvmti.h`, and linking
 the `jvm` library. On Linux, it's usually on `/usr/lib/jvm/<java release>`, and on Windows at `%ProgramFiles%\Java\jdk-<version>`.
 
+---
+
 2. Create a build directory inside the root directory of the repository and enter it:
 
 NOTE: Use the `x64 Native Tools Command Prompt` on Windows.
@@ -58,31 +60,37 @@ mkdir build
 cd build
 ```
 
+---
+
 3. Run CMake to setup the project
 
-Linux/*nix:
+**Linux/\*nix**:
 ```
 cmake ..
 ```
 
-Windows:
+**Windows**:
 ```
 cmake .. -G "NMake Makefiles" -DCMAKE_CXX_STANDARD=17
 ```
 
-3. Build using `nmake` (Windows) or `make` (*nix):
+---
 
-Linux/*nix:
+4. Build using `nmake` (Windows) or `make` (*nix):
+
+**Linux/\*nix**:
 ```
 make
 ```
 
-Windows:
+**Windows**:
 ```
 nmake
 ```
 
-After running these commands, you will have `jnihook.lib` or `libjnihook.a` in your `build` directory, which you can compile along with your project.
+---
+
+After running these commands, you will have `libjnihook.a` or `jnihook.lib` in your `build` directory, which you can compile along with your project.
 
 NOTE: Don't forget to include JNIHook's `include` dir in your project so that you can `#include <jnihook.h>`.
 
