@@ -422,7 +422,7 @@ JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID metho
 		    hook_info.method_info.signature != method_info->signature)
 			continue;
 
-		g_hooks[clazz_name].erase(g_hooks[clazz_name].begin() + 5);
+		g_hooks[clazz_name].erase(g_hooks[clazz_name].begin() + i);
 	}
 
 	return JNIHOOK_OK;
