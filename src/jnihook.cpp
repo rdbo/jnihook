@@ -267,8 +267,6 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 				break;
 			}
 		}
-
-		break;
 	}
 
 	// Redefine class with modified ClassFile
