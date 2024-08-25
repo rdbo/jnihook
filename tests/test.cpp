@@ -3,49 +3,14 @@
 #include <thread>
 #include <chrono>
 
-static std::string
-get_class_name(JNIEnv *env, jclass clazz)
-{
-	jclass klass = env->FindClass("java/lang/Class");
-	if (!klass)
-		return "";
-
-	jmethodID getName_method = env->GetMethodID(klass, "getName", "()Ljava/lang/String;");
-	if (!getName_method)
-		return "";
-
-	jstring name_obj = reinterpret_cast<jstring>(env->CallObjectMethod(clazz, getName_method));
-	if (!name_obj)
-		return "";
-
-	const char *c_name = env->GetStringUTFChars(name_obj, 0);
-	if (!c_name)
-		return "";
-
-	std::string name = std::string(c_name, &c_name[strlen(c_name)]);
-
-	env->ReleaseStringUTFChars(name_obj, c_name);
-
-	// Replace dots with slashes to match contents of ClassFile
-	for (size_t i = 0; i < name.length(); ++i) {
-		if (name[i] == '.')
-			name[i] = '/';
-	}
-	
-	return name;
-}
-
 void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
 	std::cout << "Dummy.sayHello hook called!" << std::endl;
 	std::cout << "JNIEnv: " << env << std::endl;
 	std::cout << "Class: " << clazz << std::endl;
 
-	std::cout << "Class name: " << get_class_name(env, clazz) << std::endl;
-
 	jclass orig_Dummy = JNIHook_GetOriginalClass("dummy/Dummy");
 	jmethodID orig_sayHello = env->GetStaticMethodID(orig_Dummy, "sayHello", "()V");
-	std::cout << "Original class name (copy): " << get_class_name(env, orig_Dummy) << std::endl;
 	std::cout << "Original 'sayHello': " << orig_sayHello << std::endl;
 
 	std::cout << "Calling original sayHello..." << std::endl;
@@ -60,6 +25,39 @@ void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 	std::cout << "Class: " << clazz << std::endl;
 }
 
+// TODO: Fix getter hook
+jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
+{
+	std::cout << "-> GETNUMBER " << std::endl;
+	std::cout << "-> OBJ: " << obj << std::endl;
+
+	jclass orig_class = JNIHook_GetOriginalClass("dummy/AnotherClass");
+	std::cout << "-> Original Class: " << orig_class << std::endl;
+
+	jmethodID orig_getNumber = env->GetMethodID(orig_class, "getNumber", "()I");
+	std::cout << "-> Original getNumber: " << orig_getNumber << std::endl;
+
+	jint real_number = env->CallIntMethod(obj, orig_getNumber);
+	std::cout << "-> Actual number: " << real_number << std::endl;
+
+	return 1337;
+}
+
+void JNICALL hk_AnotherClass_setNumber(JNIEnv *env, jobject obj, jint number)
+{
+	std::cout << "-> SETNUMBER " << std::endl;
+	std::cout << "-> OBJ: " << obj << std::endl;
+
+	jclass orig_class = JNIHook_GetOriginalClass("dummy/AnotherClass");
+	std::cout << "-> Original Class: " << orig_class << std::endl;
+	jmethodID orig_setNumber = env->GetMethodID(orig_class, "setNumber", "(I)V");
+	std::cout << "-> Original setNumber: " << orig_setNumber << std::endl;
+
+	std::cout << "-> Expected number: " << number << std::endl;
+
+	// env->CallIntMethod(obj, orig_setNumber, 42);
+}
+
 void
 start()
 {
@@ -70,6 +68,9 @@ start()
 	jclass clazz;
 	jmethodID sayHello_mid;
 	jmethodID sayHi_mid;
+	jclass another_clazz;
+	jmethodID getNumber_mid;
+	jmethodID setNumber_mid;
 
 	std::cout << "[*] Library loaded!" << std::endl;
 
@@ -96,7 +97,7 @@ start()
 	std::endl;
 
 	clazz = env->FindClass("dummy/Dummy");
-	std::cout << "[*] Class Dummy.dummy: " << clazz << std::endl;
+	std::cout << "[*] Class dummy.Dummy: " << clazz << std::endl;
 
 	sayHello_mid = env->GetStaticMethodID(clazz, "sayHello", "()V");
 	std::cout << "[*] Dummy.sayHello: " << sayHello_mid << std::endl;
@@ -113,6 +114,22 @@ start()
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
+
+	another_clazz = env->FindClass("dummy/AnotherClass");
+	std::cout << "[*] Class dummy.AnotherClass: " << another_clazz << std::endl;
+
+	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
+	std::cout << "[*] AnotherClass.getNumber: " << getNumber_mid << std::endl;
+
+	setNumber_mid = env->GetMethodID(another_clazz, "setNumber", "(I)V");
+	std::cout << "[*] AnotherClass.setNumber: " << setNumber_mid << std::endl;
+
+	JNIHook_Attach(&jnihook, getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber), nullptr);
+
+	// JNIHook_Attach(&jnihook, setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr);
+
+	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
+	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 

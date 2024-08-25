@@ -7,8 +7,20 @@ interface Thing {
 }
 
 class AnotherClass {
+    int number;
+
+    public int getNumber() {
+        System.out.println("-> ORIGINAL GET NUMBER CALLED");
+    	return this.number;
+    }
+
+    public void setNumber(int number) {
+        System.out.println("-> ORIGINAL SET NUMBER CALLED");
+    	this.number = number;
+    }
+
     public void alsoDoNothing() {
-        
+          
     }
 }
 
@@ -35,6 +47,12 @@ public class Dummy implements Thing {
             System.out.println("Loading library...");
             System.load(args[0]);
         }
+
+        Thread.sleep(1000);
+
+        AnotherClass obj = new AnotherClass();
+        obj.setNumber(10);
+        System.out.println("-> My Number: " + obj.getNumber());
 
         while (true) {
             sayHello();
