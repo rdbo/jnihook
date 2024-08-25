@@ -1,136 +1,160 @@
 #include <jnihook.h>
 #include <iostream>
+#include <thread>
+#include <chrono>
 
-static JavaVM *jvm;
-static int callCounter = 0;
-static jclass dummyClass;
-static jclass MyClass;
-static jmethodID myFunctionID;
-
-jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
+void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
-	std::cout << "hkMyFunction called!" << std::endl;
+	std::cout << "Dummy.sayHello hook called!" << std::endl;
+	std::cout << "JNIEnv: " << env << std::endl;
+	std::cout << "Class: " << clazz << std::endl;
 
-	std::cout << "[*] jni: " << jni << std::endl;
-	std::cout << "[*] callableMethod: " << callableMethod << std::endl;
-	std::cout << "[*] args: " << args << std::endl;
-	std::cout << "[*] nargs: " << nargs << std::endl;
-	std::cout << "[*] arg: " << arg << std::endl;
+	jclass orig_Dummy = JNIHook_GetOriginalClass("dummy/Dummy");
+	jmethodID orig_sayHello = env->GetStaticMethodID(orig_Dummy, "sayHello", "()V");
+	std::cout << "Original 'sayHello': " << orig_sayHello << std::endl;
 
-	if (++callCounter >= 8) {
-		// JNIHook_Detach(myFunctionID);
-		// std::cout << "[*] Unhooked method" << std::endl;
-		JNIHook_Shutdown();
-		std::cout << "[*] Unhooked all methods" << std::endl;
-	}
-
-	std::cout << "[*] call counter: " << callCounter << std::endl;
-
-	jvalue mynumber = args[0];
-	jvalue name = args[1];
-	std::cout << "[*] mynumber value: " << mynumber.i << std::endl;
-	std::cout << "[*] name object: " << name.l << std::endl;
-
-	// Force call the original function
-	mynumber.i = 1337;
-	jstring newName = jni->NewStringUTF("root");
-	// jstring newName = (jstring)&name;
-	std::cout << "[*] newName: " << newName << std::endl;
-	
-	jint result = jni->CallStaticIntMethod(dummyClass, callableMethod, mynumber, newName);
-	std::cout << "[*] Forced call result: " << result << std::endl;
-
-	return jvalue { .i = 6969 };
+	std::cout << "Calling original sayHello..." << std::endl;
+	env->CallStaticVoidMethod(orig_Dummy, orig_sayHello);
+	std::cout << "Called original sayHello!" << std::endl;
 }
 
-jvalue hkPrintName(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
+void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 {
-	std::cout << "[*] hkPrintName called!" << std::endl;
-
-	std::cout << "[*] Number of Args: " << nargs << std::endl;
-
-	std::cout << "[*] Args: " << std::endl;
-	std::cout << " - thisptr: " << (void *)(args[0].l) << std::endl;
-	std::cout << " - number: " << args[1].i << std::endl;
-
-	std::cout << "[*] JNI: " << jni << std::endl;
-
-	std::cout << "[*] Calling original..." << std::endl;
-
-	jni->CallVoidMethod((jobject)&args[0].l, callableMethod, 2);
-
-	std::cout << "[*] Original called" << std::endl;
-	
-	return jvalue { 0 };
+	std::cout << "Dummy.sayHi hook called!" << std::endl;
+	std::cout << "JNIEnv: " << env << std::endl;
+	std::cout << "Class: " << clazz << std::endl;
 }
 
-static void start(JavaVM *jvm, JNIEnv *jni)
+jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
 {
-	dummyClass = jni->FindClass("dummy/Dummy");
-	if (!dummyClass) {
-		std::cout << "[!] Failed to find dummy class" << std::endl;
-		return;
-	}
-	std::cout << "[*] Dummy class: " << dummyClass << std::endl;
+	std::cout << "-> GETNUMBER " << std::endl;
+	std::cout << "-> OBJ: " << obj << std::endl;
 
-	myFunctionID = jni->GetStaticMethodID(dummyClass, "myFunction", "(ILjava/lang/String;)I");
-	if (!myFunctionID) {
-		std::cout << "[!] Failed to find 'myFunction'" << std::endl;
-		return;
-	}
-	std::cout << "[*] myFunction ID: " << myFunctionID << std::endl;
+	jclass orig_class = JNIHook_GetOriginalClass("dummy/AnotherClass");
+	std::cout << "-> Original Class: " << orig_class << std::endl;
 
-	MyClass = jni->FindClass("dummy/MyClass");
-	if (!MyClass) {
-		std::cout << "[!] Failed to find MyClass" << std::endl;
-		return;
-	}
-	std::cout << "[*] MyClass: " << MyClass << std::endl;
+	jmethodID orig_getNumber = env->GetMethodID(orig_class, "getNumber", "()I");
+	std::cout << "-> Original getNumber: " << orig_getNumber << std::endl;
 
-	jmethodID printNameID = jni->GetMethodID(MyClass, "printName", "(I)V");
-	if (!printNameID) {
-		std::cout << "[!] Failed to find MyClass::printName" << std::endl;
-		return;
-	}
-	std::cout << "[*] MyClass::printName method ID: " << printNameID << std::endl;
+	// NOTE: You must call Nonvirtual method because otherwise Java
+	//       will attempt to call the method closest to the object,
+	//       resulting in a infinitely recursing call and stack overflow.
+	jint real_number = env->CallNonvirtualIntMethod(obj, orig_class, orig_getNumber);
+	std::cout << "-> Actual number: " << real_number << std::endl;
 
-	JNIHook_Init(jvm);
-	JNIHook_Attach(myFunctionID, hkMyFunction, (void *)0xdeadbeef);
-	JNIHook_Attach(printNameID, hkPrintName, NULL);
-
-	std::cout << "[*] Hooked myFunction" << std::endl;
+	return 1337;
 }
 
-void *main_thread(void *arg)
+void JNICALL hk_AnotherClass_setNumber(JNIEnv *env, jobject obj, jint number)
 {
-	JNIEnv *jni;
+	std::cout << "-> SETNUMBER " << std::endl;
+	std::cout << "-> OBJ: " << obj << std::endl;
+
+	jclass orig_class = JNIHook_GetOriginalClass("dummy/AnotherClass");
+	std::cout << "-> Original Class: " << orig_class << std::endl;
+	jmethodID orig_setNumber = env->GetMethodID(orig_class, "setNumber", "(I)V");
+	std::cout << "-> Original setNumber: " << orig_setNumber << std::endl;
+
+	std::cout << "-> Expected number: " << number << std::endl;
+
+	env->CallNonvirtualIntMethod(obj, orig_class, orig_setNumber, 42);
+}
+
+void
+start()
+{
+	JavaVM *jvm;
+	JNIEnv *env;
+	jsize jvm_count;
+	jnihook_t jnihook;
+	jclass clazz;
+	jmethodID sayHello_mid;
+	jmethodID sayHi_mid;
+	jclass another_clazz;
+	jmethodID getNumber_mid;
+	jmethodID setNumber_mid;
 
 	std::cout << "[*] Library loaded!" << std::endl;
 
-	if (JNI_GetCreatedJavaVMs(&jvm, 1, NULL) != JNI_OK) {
-		std::cout << "[!] Failed to retrieve JavaVM pointer" << std::endl;
-		return arg;
+	if (JNI_GetCreatedJavaVMs(&jvm, 1, &jvm_count) != JNI_OK) {
+		std::cerr << "[!] Failed to get created Java VMs!" << std::endl;
+		return;
 	}
 
 	std::cout << "[*] JavaVM: " << jvm << std::endl;
 
-	if (jvm->AttachCurrentThread((void **)&jni, NULL) != JNI_OK) {
-		std::cout << "[!] Failed to retrieve JNI environment" << std::endl;
-		return arg;
+	if (jvm->AttachCurrentThread(reinterpret_cast<void **>(&env), NULL) != JNI_OK) {
+		std::cerr << "[!] Failed to attach current thread to JVM!" << std::endl;
+		return;
 	}
 
-	std::cout << "[*] JNIEnv: " << jni << std::endl;
+	if (auto result = JNIHook_Init(env, &jnihook); result != JNIHOOK_OK) {
+		std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
+		goto DETACH;
+	}
 
-	start(jvm, jni);
+	std::cout << "[*] Helper: jnihook_t { jvm: " <<
+		jnihook.jvm << ", env: " << jnihook.env <<
+		", jvmti: " << jnihook.jvmti << " }" <<
+	std::endl;
 
-	return arg;
+	clazz = env->FindClass("dummy/Dummy");
+	std::cout << "[*] Class dummy.Dummy: " << clazz << std::endl;
+
+	sayHello_mid = env->GetStaticMethodID(clazz, "sayHello", "()V");
+	std::cout << "[*] Dummy.sayHello: " << sayHello_mid << std::endl;
+
+	sayHi_mid = env->GetStaticMethodID(clazz, "sayHi", "()V");
+	std::cout << "[*] Dummy.sayHi: " << sayHi_mid << std::endl;
+
+	if (auto result = JNIHook_Attach(&jnihook, sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), nullptr); result != JNIHOOK_OK) {
+		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+		goto DETACH;
+	}
+
+	if (auto result = JNIHook_Attach(&jnihook, sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi), nullptr); result != JNIHOOK_OK) {
+		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+		goto DETACH;
+	}
+
+	another_clazz = env->FindClass("dummy/AnotherClass");
+	std::cout << "[*] Class dummy.AnotherClass: " << another_clazz << std::endl;
+
+	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
+	std::cout << "[*] AnotherClass.getNumber: " << getNumber_mid << std::endl;
+
+	setNumber_mid = env->GetMethodID(another_clazz, "setNumber", "(I)V");
+	std::cout << "[*] AnotherClass.setNumber: " << setNumber_mid << std::endl;
+
+	JNIHook_Attach(&jnihook, getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber), nullptr);
+
+	JNIHook_Attach(&jnihook, setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr);
+
+	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
+	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+	if (auto result = JNIHook_Detach(&jnihook, sayHi_mid); result != JNIHOOK_OK) {
+		std::cout << "[*] Failed to detach hook: " << result << std::endl;
+	}
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
+
+	JNIHook_Shutdown(&jnihook);
+
+	std::cout << "[*] JNIHook has been shut down" << std::endl;
+
+DETACH:
+	jvm->DetachCurrentThread(); // NOTE: The JNIEnv must live until JNIHook_Shutdown() is called!
+				    //       (or if you won't call JNIHook again).
 }
 
 #ifdef _WIN32
 #include <windows.h>
 DWORD WINAPI WinThread(LPVOID lpParameter)
 {
-	main_thread(NULL);
+	start();
 	return 0;
 }
 
@@ -145,6 +169,12 @@ BOOL WINAPI DllMain(HINSTANCE hInstance, DWORD dwReason, LPVOID lpReserved)
 	return TRUE;
 }
 #else
+void *main_thread(void *arg)
+{
+	start();
+	return NULL;
+}
+
 void __attribute__((constructor))
 dl_entry()
 {

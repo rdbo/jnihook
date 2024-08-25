@@ -1,31 +1,45 @@
 package dummy;
 
-public class Dummy {
-    public static MyClass myObj = new MyClass("myObj");
-    
-    public static int myFunction(int mynumber, String name) {
-        System.out.println("Welcome, " + name);
-        System.out.println("Your number is: " + mynumber);
-        return mynumber * mynumber;
+import jdk.jfr.Description;
+
+interface Thing {
+    void doNothing();
+}
+
+class AnotherClass {
+    int number;
+
+    public int getNumber() {
+        System.out.println("-> ORIGINAL GET NUMBER CALLED");
+    	return this.number;
     }
 
-    public static void threadRun() {
-        while (true) {
-            int result = myFunction(10, "Dummy");
-            System.out.println("Result: " + result);
-            System.out.println("MyObject: ");
-            myObj.printName(3);
-
-            try {
-                Thread.sleep(1000);
-            } catch (Exception e) {
-                System.out.println("An unexpected error happened");
-            }
-        }
+    public void setNumber(int number) {
+        System.out.println("-> ORIGINAL SET NUMBER CALLED");
+    	this.number = number;
     }
-    
+
+    public void alsoDoNothing() {
+          
+    }
+}
+
+public class Dummy implements Thing {
+    @Description(value = "This is a field")
+    public static int myNumberField = 10;
+
+    public static void sayHello() {
+        System.out.println("Hello!!! This is the original function!!!");
+    }
+
+    public static void sayHi() {
+        System.out.println("Hi!!! This is the original function!!!");
+    }
+
     public static void main(String[] args) throws InterruptedException {
         System.out.println("Started Dummy Process");
+
+        sayHello();
 
         if (args.length == 0) {
             System.out.println("Missing library path!");
@@ -34,22 +48,20 @@ public class Dummy {
             System.load(args[0]);
         }
 
-        int threadCount = 2;
-        Thread[] threads = new Thread[threadCount];
+        Thread.sleep(1000);
 
-        for (int i = 0; i < threadCount; ++i) {
-            Thread t = new Thread(new Runnable() {
-                public void run() {
-                    threadRun();
-                }
-            });
+        AnotherClass obj = new AnotherClass();
+        obj.setNumber(10);
+        System.out.println("-> My Number: " + obj.getNumber());
 
-            threads[i] = t;
-            t.start();
+        while (true) {
+            sayHello();
+            sayHi();
+            Thread.sleep(1000);
         }
+    }
 
-        for (Thread t : threads) {
-            t.join();
-        }
+    public void doNothing() {
+        
     }
 }
