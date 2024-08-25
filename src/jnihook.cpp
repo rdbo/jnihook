@@ -446,6 +446,24 @@ JNIHOOK_API void JNIHOOK_CALL JNIHook_Shutdown(jnihook_t *jnihook)
 {
 	jvmtiEventCallbacks callbacks = {};
 
+	for (auto &[key, _value] : g_class_file_cache) {
+		jclass clazz = jnihook->env->FindClass(key.c_str());
+
+		g_hooks[key].clear();
+
+		if (!clazz)
+			continue;
+
+		// Reapplying the class with empty hooks will just restore the original one.
+		ReapplyClass(jnihook, clazz, key);
+	}
+
+	g_class_file_cache.clear();
+
+	// TODO: Fully cleanup defined classes in `g_original_classes` by deleting them from the JVM memory
+	//       (if possible without doing crazy hacks)
+	g_original_classes.clear();
+
 	jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
 	jnihook->jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks));
 

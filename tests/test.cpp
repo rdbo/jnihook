@@ -82,6 +82,8 @@ start()
 
 	JNIHook_Shutdown(&jnihook);
 
+	std::cout << "[*] JNIHook has been shut down" << std::endl;
+
 DETACH:
 	jvm->DetachCurrentThread(); // NOTE: The JNIEnv must live until JNIHook_Shutdown() is called!
 				    //       (or if you won't call JNIHook again).
