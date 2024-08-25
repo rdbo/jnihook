@@ -187,6 +187,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	std::string clazz_name;
 	hook_info_t hook_info;
 	jvmtiClassDefinition class_definition;
+	jobject class_loader;
 
 	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -213,19 +214,23 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 		}
 
-		if (jnihook->jvmti->RetransformClasses(1, &clazz) != JVMTI_ERROR_NONE)
-			return JNIHOOK_ERR_CLASSFILE_CACHE;
-
-		if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-			return JNIHOOK_ERR_CLASSFILE_CACHE;
-		}
+		auto result = jnihook->jvmti->RetransformClasses(1, &clazz);
 
 		// NOTE: We disable the ClassFileLoadHook here because it breaks
-		//       any `env->DefineClasses()` calls.
+		//       any `env->DefineClasses()` calls. Also, it's not necessary
+		//       to keep it active at all times, we just have to use it for caching
+		//       uncached hooked classes.
 		// TODO: Investigate why it breaks it (possibly NullPointerException in
 		//       JNIHook_ClassFileLoadHook)
 		if (jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
 			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+		}
+
+		if (result != JVMTI_ERROR_NONE)
+			return JNIHOOK_ERR_CLASS_FILE_CACHE;
+
+		if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+			return JNIHOOK_ERR_CLASS_FILE_CACHE;
 		}
 	}
 
@@ -305,17 +310,14 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 		auto class_data = cf.bytes();
 
-		// TODO: Consider using same class loader as original class!
-		class_copy = jnihook->env->DefineClass(NULL, NULL,
+		if (jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
+			return JNIHOOK_ERR_JVMTI_OPERATION;
+
+		class_copy = jnihook->env->DefineClass(NULL, class_loader,
 						       reinterpret_cast<const jbyte *>(class_data.data()),
 						       class_data.size());
-		///* TODO: REMOVE!
-		FILE *f = fopen("DUMP.class", "w");
-		fwrite(class_data.data(), 1, class_data.size(), f);
-		fclose(f);
-		//*/
 
-		std::cout << cf.str() << std::endl;
+		std::cout << "CLASS COPY:" << class_copy << std::endl;
 
 		if (!class_copy)
 			return JNIHOOK_ERR_JNI_OPERATION;
@@ -325,7 +327,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 	// Verify that everything was cached correctly
 	if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-		return JNIHOOK_ERR_CLASSFILE_CACHE;
+		return JNIHOOK_ERR_CLASS_FILE_CACHE;
 	}
 
 	auto cf = *g_class_file_cache[clazz_name];
