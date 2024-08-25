@@ -11,29 +11,29 @@ Read the file `LICENSE` for more information.
 ## Example
 Hooking the function `static int myFunction(int mynumber, String name)` from a class `Dummy`:
 ```c++
-jvalue hkMyFunction(JNIEnv *jni, jmethodID callableMethod, jvalue *args, size_t nargs, void *arg)
+jint hkMyFunction(JNIEnv *jni, jclass clazz, jint number, jstring name)
 {
 	// Print parameters
-	jvalue mynumber = args[0];
-	jvalue name = args[1];
 	std::cout << "[*] mynumber value: " << mynumber.i << std::endl;
 	std::cout << "[*] name object: " << name.l << std::endl;
 
-	// Call the original function with 'mynumber' set to '1337'
-	mynumber.i = 1337;
-	jni->CallStaticIntMethod(dummyClass, callableMethod, mynumber, (jstring)&name);
+	// Get unhooked class for accessing original methods
+	jclass originalClass = JNIHook_GetOriginalClass("dummy/Dummy");
 
-	// Get original function parameters
-	return jvalue { .i = 42 }; // Modify the return value to '42'
+	// Call the original method with 'mynumber' set to '1337'
+	jni->CallNonvirtualIntMethod(dummyClass, callableMethod, 1337, name);
+
+	return 42; // Modify the return value to '42'
 }
 
-void start(JavaVM *jvm, JNIEnv *jni)
+void start(JavaVM *jvm, JNIEnv *env)
 {
-	jclass dummyClass = jni->FindClass("dummy/Dummy");
-	jmethodID myFunctionID = jni->GetStaticMethodID(dummyClass, "myFunction", "(ILjava/lang/String;)I");
+	jnihook_t jnihook;
+	jclass dummyClass = env->FindClass("dummy/Dummy");
+	jmethodID myFunctionID = env->GetStaticMethodID(dummyClass, "myFunction", "(ILjava/lang/String;)I");
 
-	JNIHook_Init(jvm);
-	JNIHook_Attach(myFunctionID, hkMyFunction, NULL);
+	JNIHook_Init(env, &jnihook);
+	JNIHook_Attach(&jnihook, myFunctionID, hkMyFunction, NULL);
 }
 ```
 
