@@ -79,5 +79,5 @@ After running these commands, you will have `jnihook.lib` or `libjnihook.a` in y
 
 NOTE: Don't forget to include JNIHook's `include` dir in your project so that you can `#include <jnihook.h>`.
 
-## Credits
-Special thanks to [@Lefraudeur](https://github.com/Lefraudeur) for helping me a lot through the development of this library
+## Acknowledgements
+Special thanks to [@Lefraudeur](https://github.com/Lefraudeur) for helping me with information about JVM functionality
