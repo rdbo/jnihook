@@ -27,6 +27,8 @@
 #include <cstdint>
 #include "classfile.hpp"
 
+#include <iostream> // TODO: REMOVE
+
 typedef struct method_info_t {
 	std::string name;
 	std::string signature;
@@ -389,7 +391,42 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	return JNIHOOK_OK;
 }
 
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID method);
+JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID method)
+{
+	jclass clazz;
+	std::string clazz_name;
+	hook_info_t hook_info;
+	jvmtiClassDefinition class_definition;
+
+	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
+		return JNIHOOK_ERR_JVMTI_OPERATION;
+	}
+
+	clazz_name = get_class_name(jnihook->env, clazz);
+	if (clazz_name.length() == 0) {
+		return JNIHOOK_ERR_JNI_OPERATION;
+	}
+
+	if (g_hooks.find(clazz_name) == g_hooks.end()) {
+		return JNIHOOK_OK;
+	}
+
+	auto method_info = get_method_info(jnihook->jvmti, method);
+	if (!method_info) {
+		return JNIHOOK_ERR_JVMTI_OPERATION;
+	}
+
+	for (size_t i = 0; i < g_hooks[clazz_name].size(); ++i) {
+		auto &hook_info = g_hooks[clazz_name][i];
+		if (hook_info.method_info.name != method_info->name ||
+		    hook_info.method_info.signature != method_info->signature)
+			continue;
+
+		g_hooks[clazz_name].erase(g_hooks[clazz_name].begin() + 5);
+	}
+
+	return JNIHOOK_OK;
+}
 
 
 JNIHOOK_API void JNIHOOK_CALL JNIHook_Shutdown(jnihook_t *jnihook)

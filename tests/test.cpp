@@ -2,6 +2,8 @@
 #include "../src/classfile.hpp"
 #include <iostream>
 
+#include <unistd.h> // TODO: REMOVE
+
 void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
 	std::cout << "Dummy.sayHello hook called!" << std::endl;
@@ -68,6 +70,14 @@ start()
 	if (auto result = JNIHook_Attach(&jnihook, sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi)); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
+	}
+
+	std::cout << "SLEEPIN" << std::endl;
+	sleep(2);
+
+	std::cout << "AWAKE" << std::endl;
+	if (auto result = JNIHook_Detach(&jnihook, sayHi_mid); result != JNIHOOK_OK) {
+		std::cout << "[*] Failed to detach hook: " << result << std::endl;
 	}
 
 	JNIHook_Shutdown(&jnihook);
