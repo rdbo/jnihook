@@ -62,9 +62,11 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 JNIHOOK_API jclass JNIHOOK_CALL
 JNIHook_GetOriginalClass(const char *class_name);
 
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID method);
+JNIHOOK_API jint JNIHOOK_CALL
+JNIHook_Detach(jnihook_t *jnihook, jmethodID method);
 
-JNIHOOK_API void JNIHOOK_CALL JNIHook_Shutdown(jnihook_t *jnihook);
+JNIHOOK_API void JNIHOOK_CALL
+JNIHook_Shutdown(jnihook_t *jnihook);
 
 #ifdef __cplusplus
 }
