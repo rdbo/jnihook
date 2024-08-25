@@ -210,8 +210,10 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	g_hooks[clazz_name].push_back(hook_info);
 
 	// Force caching of the class being hooked
-	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end())
-		jnihook->jvmti->RetransformClasses(1, &clazz);
+	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+		if (jnihook->jvmti->RetransformClasses(1, &clazz) != JVMTI_ERROR_NONE)
+			return JNIHOOK_ERR_JVMTI_OPERATION;
+	}
 
 	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
 		return JNIHOOK_ERR_CLASSFILE_CACHE;

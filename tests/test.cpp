@@ -9,7 +9,7 @@ void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 	std::cout << "Class: " << clazz << std::endl;
 }
 
-void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclazz clazz)
+void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 {
 	std::cout << "Dummy.sayHi hook called!" << std::endl;
 	std::cout << "JNIEnv: " << env << std::endl;
