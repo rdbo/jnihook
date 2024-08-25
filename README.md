@@ -30,7 +30,8 @@ void start(JavaVM *jvm, JNIEnv *env)
 {
 	jnihook_t jnihook;
 	jclass dummyClass = env->FindClass("dummy/Dummy");
-	jmethodID myFunctionID = env->GetStaticMethodID(dummyClass, "myFunction", "(ILjava/lang/String;)I");
+	jmethodID myFunctionID = env->GetStaticMethodID(dummyClass, "myFunction",
+													"(ILjava/lang/String;)I");
 
 	JNIHook_Init(env, &jnihook);
 	JNIHook_Attach(&jnihook, myFunctionID, hkMyFunction, NULL);
