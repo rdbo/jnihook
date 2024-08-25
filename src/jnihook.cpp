@@ -173,10 +173,6 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 		return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 	}
 
-	if (jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
-		return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
-	}
-
 	jnihook->jvm = jvm;
 	jnihook->env = env;
 	jnihook->jvmti = jvmti;
@@ -213,11 +209,23 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 	// Force caching of the class being hooked
 	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+		if (jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+		}
+
 		if (jnihook->jvmti->RetransformClasses(1, &clazz) != JVMTI_ERROR_NONE)
 			return JNIHOOK_ERR_CLASSFILE_CACHE;
 
 		if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
 			return JNIHOOK_ERR_CLASSFILE_CACHE;
+		}
+
+		// NOTE: We disable the ClassFileLoadHook here because it breaks
+		//       any `env->DefineClasses()` calls.
+		// TODO: Investigate why it breaks it (possibly NullPointerException in
+		//       JNIHook_ClassFileLoadHook)
+		if (jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 		}
 	}
 

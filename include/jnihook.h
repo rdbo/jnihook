@@ -64,18 +64,6 @@ JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID metho
 
 JNIHOOK_API void JNIHOOK_CALL JNIHook_Shutdown(jnihook_t *jnihook);
 
-/* NOTE: If you override the ClassFileLoadHook externally from JNIHook, you have to call this function */
-void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
-				       JNIEnv* jni_env,
-				       jclass class_being_redefined,
-				       jobject loader,
-				       const char* name,
-				       jobject protection_domain,
-				       jint class_data_len,
-				       const unsigned char* class_data,
-				       jint* new_class_data_len,
-				       unsigned char** new_class_data);
-
 #ifdef __cplusplus
 }
 #endif
