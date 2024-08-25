@@ -42,12 +42,15 @@ void start(JavaVM *jvm, JNIEnv *env)
 To build this, you can either compile all the files in `src` into your project, or
 use CMake to build a static library, which can be compiled into your project.
 
-NOTE: This requires C++20, which is available on newer versions of Visual Studio and GCC.
+NOTE: This requires C++17, which is available on newer versions of Visual Studio and GCC.
 
 The steps ahead are for building a static library with CMake.
 
 
-1. Create a build directory inside the root directory of the repository and enter it:
+1. Setup your `JAVA_HOME` environment variable. It will be used for accessing `jni.h`, `jvmti.h`, and linking
+the `jvm` library. On Linux, it's usually on `/usr/lib/jvm/<java release>`, and on Windows at `%ProgramFiles%\Java\jdk-<version>`.
+
+2. Create a build directory inside the root directory of the repository and enter it:
 
 NOTE: Use the `x64 Native Tools Command Prompt` on Windows.
 ```
@@ -55,25 +58,28 @@ mkdir build
 cd build
 ```
 
-2. Run CMake and set up the includes directories and additional OS-specific configuration.
-Windows example (`%JAVA_HOME%` is `%ProgramFiles%\Java\jdk-<VERSION>`; might be necessary to copy `jvm.lib` into your `build` directory):
+3. Run CMake to setup the project
+
+Linux/*nix:
 ```
-cmake .. -G "NMake Makefiles" -DCMAKE_CXX_FLAGS="/I \"%JAVA_HOME%\include\" /I \"%JAVA_HOME%\include\win32\"" -DCMAKE_CXX_STANDARD=20
+cmake ..
 ```
-Linux example (`$JAVA_HOME` is usually `/usr/lib/jvm/default-jvm` or `/usr/lib/jvm/default-java`):
+
+Windows:
 ```
-cmake .. -DCMAKE_CXX_FLAGS="-I \"$JAVA_HOME/include\" -I \"$JAVA_HOME/include/linux\""
+cmake .. -G "NMake Makefiles" -DCMAKE_CXX_STANDARD=17
 ```
 
 3. Build using `nmake` (Windows) or `make` (*nix):
 
+Linux/*nix:
+```
+make
+```
+
 Windows:
 ```
 nmake
-```
-*nix:
-```
-make
 ```
 
 After running these commands, you will have `jnihook.lib` or `libjnihook.a` in your `build` directory, which you can compile along with your project.
