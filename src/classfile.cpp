@@ -375,9 +375,11 @@ ClassFile::load(const uint8_t *classfile_bytes)
 		attributes.push_back(ai);
 	}
 
+	auto original_bytes = std::vector<uint8_t>(classfile_bytes, &classfile_bytes[index]);
+
 	return std::make_unique<ClassFile>(magic, minor, major, constant_pool_count, constant_pool,
 	                                   access_flags, this_class, super_class, interfaces, fields,
-	                                   methods, attributes);
+	                                   methods, attributes, original_bytes);
 }
 
 std::vector<uint8_t>

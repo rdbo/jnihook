@@ -42,6 +42,7 @@ typedef struct hook_info_t {
 // TODO: Make the following globals specific to a jnihook_t without breaking C compat
 static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
 static std::unordered_map<std::string, std::unique_ptr<ClassFile>> g_class_file_cache;
+static std::unordered_map<std::string, jclass> g_original_classes;
 
 static std::string
 get_class_signature(jvmtiEnv *jvmti, jclass clazz)
@@ -122,18 +123,18 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 {
 	auto class_name = get_class_name(jni_env, class_being_redefined);
 
-	// If the cache is not hooked, or it is already cached, no point in caching again
-	if (class_name == "" || g_hooks.find(class_name) == g_hooks.end() ||
-	    g_class_file_cache.find(class_name) != g_class_file_cache.end()) {
+	// Don't do anything for unhooked classes
+	if (class_name == "" || g_hooks.find(class_name) == g_hooks.end())
 		return;
+
+	// Cache parsed ClassFile if it's not cached yet
+	if (g_class_file_cache.find(class_name) == g_class_file_cache.end()) {
+		auto cf = ClassFile::load(class_data);
+		if (!cf)
+			return;
+
+		g_class_file_cache[class_name] = std::move(cf);
 	}
-
-	// Cache parsed classfile
-	auto cf = ClassFile::load(class_data);
-	if (!cf)
-		return;
-
-	g_class_file_cache[class_name] = std::move(cf);
 
 	return;
 }
@@ -212,10 +213,112 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	// Force caching of the class being hooked
 	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
 		if (jnihook->jvmti->RetransformClasses(1, &clazz) != JVMTI_ERROR_NONE)
-			return JNIHOOK_ERR_JVMTI_OPERATION;
+			return JNIHOOK_ERR_CLASSFILE_CACHE;
+
+		if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+			return JNIHOOK_ERR_CLASSFILE_CACHE;
+		}
 	}
 
-	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+	// Make copy of the class prior to hooking it
+	// (allows calling the original functions)
+	if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
+		std::string class_copy_name = clazz_name + "___original___";
+		std::string class_shortname = class_copy_name.substr(class_copy_name.find_last_of('/') + 1);
+		std::string class_copy_source_name = class_shortname + ".java";
+		jclass class_copy;
+		jobject class_loader;
+		auto cf = *g_class_file_cache[clazz_name];
+
+		// Patch source file name (Java will refuse to define the class otherwise)
+		for (auto &attr : cf.get_attributes()) {
+			auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+				cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
+			);
+			auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
+			if (attr_name != "SourceFile")
+				continue;
+
+			u2 source = *reinterpret_cast<u2 *>(attr.info.data());
+			// auto sourcefile_cpi = cf.get_constant_pool_item_be(source);
+			/*
+			auto sourcefile_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+				sourcefile_cpi.bytes.data()
+			);
+			auto sourcefile = std::string(sourcefile_ci->bytes, &sourcefile_ci->bytes[sourcefile_ci->length]);
+
+			std::cout << "SOURCE FILE: " << sourcefile << std::endl;
+			*/
+
+			// Overwrite constant pool item
+			CONSTANT_Utf8_info ci;
+			cp_info sourcefile_cpi;
+			ci.tag = CONSTANT_Utf8;
+			ci.length = static_cast<u2>(class_copy_source_name.size());
+
+			sourcefile_cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
+			memcpy(sourcefile_cpi.bytes.data(), &ci, sizeof(ci));
+			memcpy(&sourcefile_cpi.bytes.data()[sizeof(ci)], class_copy_source_name.c_str(), ci.length);
+
+			cf.set_constant_pool_item_be(source, sourcefile_cpi);
+		}
+
+		// Patch class name (Java will refuse to define the class otherwise)
+		for (auto &cpi : cf.get_constant_pool()) {
+			if (cpi.bytes[0] != CONSTANT_Class)
+				continue;
+
+			auto class_ci = reinterpret_cast<CONSTANT_Class_info *>(
+				cpi.bytes.data()
+			);
+
+			auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+				cf.get_constant_pool_item(class_ci->name_index).bytes.data()
+			);
+
+			auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
+
+			if (name == clazz_name) {
+				// Overwrite constant pool item
+				CONSTANT_Utf8_info ci;
+				cp_info cpi;
+
+				ci.tag = CONSTANT_Utf8;
+				ci.length = static_cast<u2>(class_copy_name.size());
+
+				cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
+				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
+				memcpy(&cpi.bytes.data()[sizeof(ci)], class_copy_name.c_str(), ci.length);
+
+				cf.set_constant_pool_item(class_ci->name_index, cpi);
+				break; // TODO: Assure that the ClassName can only happen once per ClassFile!
+			}
+		}
+
+		auto class_data = cf.bytes();
+
+		if (jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
+			return JNIHOOK_ERR_JVMTI_OPERATION;
+		
+		class_copy = jnihook->env->DefineClass(class_copy_name.c_str(), class_loader,
+						       reinterpret_cast<const jbyte *>(class_data.data()),
+						       class_data.size());
+		///* TODO: REMOVE!
+		FILE *f = fopen("DUMP.class", "w");
+		fwrite(class_data.data(), 1, class_data.size(), f);
+		fclose(f);
+		//*/
+
+		std::cout << cf.str() << std::endl;
+
+		if (!class_copy)
+			return JNIHOOK_ERR_JNI_OPERATION;
+
+		g_original_classes[clazz_name] = class_copy;
+	}
+
+	// Verify that everything was cached correctly
+	if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
 		return JNIHOOK_ERR_CLASSFILE_CACHE;
 	}
 
@@ -271,6 +374,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 	// Redefine class with modified ClassFile
 	auto cf_bytes = cf.bytes();
+
 	class_definition.klass = clazz;
 	class_definition.class_byte_count = cf_bytes.size();
 	class_definition.class_bytes = cf_bytes.data();

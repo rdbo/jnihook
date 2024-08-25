@@ -196,6 +196,8 @@ private:
 	std::vector<field_info> fields;
 	std::vector<method_info> methods;
 	std::vector<attribute_info> attributes;
+
+	std::vector<uint8_t> original_bytes; // The bytes that were passed to ClassFile::load
 public:
 	static std::unique_ptr<ClassFile>
 	load(const uint8_t *classfile_bytes);
@@ -227,6 +229,14 @@ public:
 			ss << "\t\t\ttag: " << static_cast<int>(tag) << std::endl;
 
 			switch (tag) {
+			case CONSTANT_Class:
+				{
+					auto info = reinterpret_cast<CONSTANT_Class_info *>(cpi.bytes.data());
+					ss << "\t\t\t_name_index: " << info->name_index << std::endl;
+					break;
+
+					break;
+				}
 			case CONSTANT_Utf8:
 				{
 					CONSTANT_Utf8_info *info = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
@@ -368,12 +378,13 @@ public:
 	}
 public:
 	inline ClassFile(u4 magic, u2 minor, u2 major, u2 constant_pool_count, std::vector<cp_info> constant_pool,
-	                 u2 access_flags, u2 this_class, u2 super_class,
-	                 std::vector<u2> interfaces, std::vector<field_info> fields,
-	                 std::vector<method_info> methods, std::vector<attribute_info> attributes)
+	                 u2 access_flags, u2 this_class, u2 super_class, std::vector<u2> interfaces,
+	                 std::vector<field_info> fields, std::vector<method_info> methods,
+	                 std::vector<attribute_info> attributes, std::vector<uint8_t> original_bytes)
 		: magic(magic), minor(minor), major(major), constant_pool_count(constant_pool_count),
 		constant_pool(constant_pool), access_flags(access_flags), this_class(this_class),
-		super_class(super_class), interfaces(interfaces), fields(fields), methods(methods), attributes(attributes)
+		super_class(super_class), interfaces(interfaces), fields(fields), methods(methods),
+		attributes(attributes), original_bytes(original_bytes)
 	{}
 
 	DEFINE_GETTER(magic)
@@ -388,6 +399,7 @@ public:
 	DEFINE_GETTER(fields)
 	DEFINE_GETTER(methods)
 	DEFINE_GETTER(attributes)
+	DEFINE_GETTER(original_bytes)
 
 	inline u2 interfaces_count()
 	{
@@ -412,6 +424,29 @@ public:
 	inline cp_info &get_constant_pool_item(u2 index)
 	{
 		return this->constant_pool[index];
+	}
+
+	// Big-endian indexing for ease-of-use
+	inline cp_info &get_constant_pool_item_be(u2 index)
+	{
+		u1 lo = index >> 8;
+		u1 hi = index & 0xff;
+		u2 le = (hi << 8) | lo;
+		return this->get_constant_pool_item(le);
+	}
+
+	inline void set_constant_pool_item(u2 index, cp_info value)
+	{
+		this->constant_pool[index] = value;
+	}
+
+	inline void set_constant_pool_item_be(u2 index, cp_info value)
+	{
+		u1 lo = index >> 8;
+		u1 hi = index & 0xff;
+		u2 le = (hi << 8) | lo;
+
+		this->set_constant_pool_item(le, value);
 	}
 };
 
