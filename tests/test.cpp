@@ -4,14 +4,13 @@
 #include <thread>
 #include <chrono>
 
-jclass orig_Dummy;
-
 void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
 	std::cout << "Dummy.sayHello hook called!" << std::endl;
 	std::cout << "JNIEnv: " << env << std::endl;
 	std::cout << "Class: " << clazz << std::endl;
 
+	jclass orig_Dummy = JNIHook_GetOriginalClass("dummy/Dummy");
 	jmethodID orig_sayHello = env->GetStaticMethodID(orig_Dummy, "sayHello", "()V");
 	std::cout << "Original 'sayHello': " << orig_sayHello << std::endl;
 
@@ -71,7 +70,7 @@ start()
 	sayHi_mid = env->GetStaticMethodID(clazz, "sayHi", "()V");
 	std::cout << "[*] Dummy.sayHi: " << sayHi_mid << std::endl;
 
-	if (auto result = JNIHook_Attach(&jnihook, sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), &orig_Dummy); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Attach(&jnihook, sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), nullptr); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
