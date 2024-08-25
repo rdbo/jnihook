@@ -14,8 +14,8 @@ Hooking the function `static int myFunction(int mynumber, String name)` from a c
 jint hkMyFunction(JNIEnv *jni, jclass clazz, jint number, jstring name)
 {
 	// Print parameters
-	std::cout << "[*] mynumber value: " << mynumber.i << std::endl;
-	std::cout << "[*] name object: " << name.l << std::endl;
+	std::cout << "[*] mynumber value: " << mynumber << std::endl;
+	std::cout << "[*] name object: " << name << std::endl;
 
 	// Get unhooked class for accessing original methods
 	jclass originalClass = JNIHook_GetOriginalClass("dummy/Dummy");
