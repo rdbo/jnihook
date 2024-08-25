@@ -37,7 +37,10 @@ jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
 	jmethodID orig_getNumber = env->GetMethodID(orig_class, "getNumber", "()I");
 	std::cout << "-> Original getNumber: " << orig_getNumber << std::endl;
 
-	jint real_number = env->CallIntMethod(obj, orig_getNumber);
+	// NOTE: You must call Nonvirtual method because otherwise Java
+	//       will attempt to call the method closest to the object,
+	//       resulting in a infinitely recursing call and stack overflow.
+	jint real_number = env->CallNonvirtualIntMethod(obj, orig_class, orig_getNumber);
 	std::cout << "-> Actual number: " << real_number << std::endl;
 
 	return 1337;
@@ -55,7 +58,7 @@ void JNICALL hk_AnotherClass_setNumber(JNIEnv *env, jobject obj, jint number)
 
 	std::cout << "-> Expected number: " << number << std::endl;
 
-	// env->CallIntMethod(obj, orig_setNumber, 42);
+	env->CallNonvirtualIntMethod(obj, orig_class, orig_setNumber, 42);
 }
 
 void
@@ -126,7 +129,7 @@ start()
 
 	JNIHook_Attach(&jnihook, getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber), nullptr);
 
-	// JNIHook_Attach(&jnihook, setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr);
+	JNIHook_Attach(&jnihook, setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr);
 
 	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
 	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;
