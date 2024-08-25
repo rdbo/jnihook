@@ -139,6 +139,75 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	return;
 }
 
+// Patches up a class with the current hooks (if any)
+// and redefines it using JVMTI
+jnihook_result_t
+ReapplyClass(jnihook_t *jnihook, jclass clazz, std::string clazz_name)
+{
+	jvmtiClassDefinition class_definition;
+
+	auto cf = *g_class_file_cache[clazz_name];
+
+	auto constant_pool = cf.get_constant_pool();
+
+	// Patch class file
+	// NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
+	//       Method references are not included here
+	//       If the source file has more than one class, they are compiled as separate ClassFiles
+	for (auto &method : cf.get_methods()) {
+		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(method.name_index).bytes.data()
+		);
+
+		auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+			cf.get_constant_pool_item(method.descriptor_index).bytes.data()
+		);
+
+		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
+		auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
+
+		// Check if the current method is a method that should be hooked
+		// TODO: Use hashmap for faster lookup
+		bool should_hook = false;
+		for (auto &hk_info : g_hooks[clazz_name]) {
+			auto &minfo = hk_info.method_info;
+			if (minfo.name == name && minfo.signature == descriptor) {
+				should_hook = true;
+				break;
+			}
+		}
+		if (!should_hook)
+			continue;
+
+		// Set method to native
+		method.access_flags |= ACC_NATIVE;
+
+		// Remove "Code" attribute
+		for (size_t i = 0; i < method.attributes.size(); ++i) {
+			auto attr = method.attributes[i];
+			auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+				cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
+			);
+			auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
+			if (attr_name == "Code") {
+				method.attributes.erase(method.attributes.begin() + i);
+				break;
+			}
+		}
+	}
+
+	// Redefine class with modified ClassFile
+	auto cf_bytes = cf.bytes();
+
+	class_definition.klass = clazz;
+	class_definition.class_byte_count = cf_bytes.size();
+	class_definition.class_bytes = cf_bytes.data();
+	if (jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
+		return JNIHOOK_ERR_JVMTI_OPERATION;
+
+	return JNIHOOK_OK;
+}
+
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 {
@@ -186,7 +255,6 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	jclass clazz;
 	std::string clazz_name;
 	hook_info_t hook_info;
-	jvmtiClassDefinition class_definition;
 	jobject class_loader;
 
 	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
@@ -319,64 +387,9 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		return JNIHOOK_ERR_CLASS_FILE_CACHE;
 	}
 
-	auto cf = *g_class_file_cache[clazz_name];
-
-	auto constant_pool = cf.get_constant_pool();
-
-	// Patch class file
-	// NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
-	//       Method references are not included here
-	//       If the source file has more than one class, they are compiled as separate ClassFiles
-	for (auto &method : cf.get_methods()) {
-		auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(method.name_index).bytes.data()
-		);
-
-		auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-			cf.get_constant_pool_item(method.descriptor_index).bytes.data()
-		);
-
-		auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
-		auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-
-		// Check if the current method is a method that should be hooked
-		// TODO: Use hashmap for faster lookup
-		bool should_hook = false;
-		for (auto &hk_info : g_hooks[clazz_name]) {
-			auto &minfo = hk_info.method_info;
-			if (minfo.name == name && minfo.signature == descriptor) {
-				should_hook = true;
-				break;
-			}
-		}
-		if (!should_hook)
-			continue;
-
-		// Set method to native
-		method.access_flags |= ACC_NATIVE;
-
-		// Remove "Code" attribute
-		for (size_t i = 0; i < method.attributes.size(); ++i) {
-			auto attr = method.attributes[i];
-			auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-				cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
-			);
-			auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
-			if (attr_name == "Code") {
-				method.attributes.erase(method.attributes.begin() + i);
-				break;
-			}
-		}
-	}
-
-	// Redefine class with modified ClassFile
-	auto cf_bytes = cf.bytes();
-
-	class_definition.klass = clazz;
-	class_definition.class_byte_count = cf_bytes.size();
-	class_definition.class_bytes = cf_bytes.data();
-	if (jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
-		return JNIHOOK_ERR_JVMTI_OPERATION;
+	// Apply current hooks
+	if (auto result = ReapplyClass(jnihook, clazz, clazz_name); result != JNIHOOK_OK)
+		return result;
 
 	// Register native method for JVM lookup
 	JNINativeMethod native_method;
@@ -425,7 +438,7 @@ JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID metho
 		g_hooks[clazz_name].erase(g_hooks[clazz_name].begin() + i);
 	}
 
-	return JNIHOOK_OK;
+	return ReapplyClass(jnihook, clazz, clazz_name);
 }
 
 
