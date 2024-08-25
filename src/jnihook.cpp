@@ -285,7 +285,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 		auto result = jnihook->jvmti->RetransformClasses(1, &clazz);
 
 		// NOTE: We disable the ClassFileLoadHook here because it breaks
-		//       any `env->DefineClasses()` calls. Also, it's not necessary
+		//       any `env->DefineClass()` calls. Also, it's not necessary
 		//       to keep it active at all times, we just have to use it for caching
 		//       uncached hooked classes.
 		// TODO: Investigate why it breaks it (possibly NullPointerException in
