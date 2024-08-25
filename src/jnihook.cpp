@@ -28,8 +28,6 @@
 #include "classfile.hpp"
 #include "uuid.hpp"
 
-#include <iostream> // TODO: REMOVE
-
 typedef struct method_info_t {
 	std::string name;
 	std::string signature;
