@@ -27,8 +27,6 @@
 #include <cstdint>
 #include "classfile.hpp"
 
-#include <iostream> // TODO: Remove
-
 typedef struct method_info_t {
 	std::string name;
 	std::string signature;
@@ -253,15 +251,6 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 				continue;
 
 			u2 source = *reinterpret_cast<u2 *>(attr.info.data());
-			// auto sourcefile_cpi = cf.get_constant_pool_item_be(source);
-			/*
-			auto sourcefile_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-				sourcefile_cpi.bytes.data()
-			);
-			auto sourcefile = std::string(sourcefile_ci->bytes, &sourcefile_ci->bytes[sourcefile_ci->length]);
-
-			std::cout << "SOURCE FILE: " << sourcefile << std::endl;
-			*/
 
 			// Overwrite constant pool item
 			CONSTANT_Utf8_info ci;
@@ -316,8 +305,6 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 		class_copy = jnihook->env->DefineClass(NULL, class_loader,
 						       reinterpret_cast<const jbyte *>(class_data.data()),
 						       class_data.size());
-
-		std::cout << "CLASS COPY:" << class_copy << std::endl;
 
 		if (!class_copy)
 			return JNIHOOK_ERR_JNI_OPERATION;
