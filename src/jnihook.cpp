@@ -250,7 +250,7 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 }
 
 JNIHOOK_API jint JNIHOOK_CALL
-JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
+JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, jclass *original_class)
 {
 	jclass clazz;
 	std::string clazz_name;
@@ -400,6 +400,9 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	if (jnihook->env->RegisterNatives(clazz, &native_method, 1) < 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
+
+	if (original_class)
+		*original_class = g_original_classes[clazz_name];
 
 	return JNIHOOK_OK;
 }

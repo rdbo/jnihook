@@ -57,7 +57,7 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook);
 
 /* Function signature for native_hook_method: ReturnType (*fnPtr)(JNIEnv *env, jobject objectOrClass, ...); */
 JNIHOOK_API jint JNIHOOK_CALL
-JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method);
+JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, jclass *original_class);
 
 JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID method);
 
