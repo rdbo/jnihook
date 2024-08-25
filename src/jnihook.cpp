@@ -26,6 +26,7 @@
 #include <vector>
 #include <cstdint>
 #include "classfile.hpp"
+#include "uuid.hpp"
 
 #include <iostream> // TODO: REMOVE
 
@@ -315,7 +316,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 	// Make copy of the class prior to hooking it
 	// (allows calling the original functions)
 	if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-		std::string class_copy_name = clazz_name + "___original___";
+		std::string class_copy_name = clazz_name + "_" + GenerateUuid();
 		std::string class_shortname = class_copy_name.substr(class_copy_name.find_last_of('/') + 1);
 		std::string class_copy_source_name = class_shortname + ".java";
 		jclass class_copy;

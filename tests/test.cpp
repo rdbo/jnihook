@@ -1,8 +1,39 @@
 #include <jnihook.h>
-#include "../src/classfile.hpp"
 #include <iostream>
 #include <thread>
 #include <chrono>
+
+static std::string
+get_class_name(JNIEnv *env, jclass clazz)
+{
+	jclass klass = env->FindClass("java/lang/Class");
+	if (!klass)
+		return "";
+
+	jmethodID getName_method = env->GetMethodID(klass, "getName", "()Ljava/lang/String;");
+	if (!getName_method)
+		return "";
+
+	jstring name_obj = reinterpret_cast<jstring>(env->CallObjectMethod(clazz, getName_method));
+	if (!name_obj)
+		return "";
+
+	const char *c_name = env->GetStringUTFChars(name_obj, 0);
+	if (!c_name)
+		return "";
+
+	std::string name = std::string(c_name, &c_name[strlen(c_name)]);
+
+	env->ReleaseStringUTFChars(name_obj, c_name);
+
+	// Replace dots with slashes to match contents of ClassFile
+	for (size_t i = 0; i < name.length(); ++i) {
+		if (name[i] == '.')
+			name[i] = '/';
+	}
+	
+	return name;
+}
 
 void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
@@ -10,8 +41,11 @@ void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 	std::cout << "JNIEnv: " << env << std::endl;
 	std::cout << "Class: " << clazz << std::endl;
 
+	std::cout << "Class name: " << get_class_name(env, clazz) << std::endl;
+
 	jclass orig_Dummy = JNIHook_GetOriginalClass("dummy/Dummy");
 	jmethodID orig_sayHello = env->GetStaticMethodID(orig_Dummy, "sayHello", "()V");
+	std::cout << "Original class name (copy): " << get_class_name(env, orig_Dummy) << std::endl;
 	std::cout << "Original 'sayHello': " << orig_sayHello << std::endl;
 
 	std::cout << "Calling original sayHello..." << std::endl;
