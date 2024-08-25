@@ -279,16 +279,13 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 	if (jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 
-	// Register native methods for JVM lookup
-	std::vector<JNINativeMethod> native_methods;
-	for (auto &hk_info : g_hooks[clazz_name]) {
-		JNINativeMethod native_method;
-		native_method.name = const_cast<char *>(hk_info.method_info.name.c_str());
-		native_method.signature = const_cast<char *>(hk_info.method_info.signature.c_str());
-		native_method.fnPtr = hk_info.native_hook_method;
-		native_methods.push_back(native_method);
-	}
-	if (jnihook->env->RegisterNatives(clazz, native_methods.data(), native_methods.size()) < 0) {
+	// Register native method for JVM lookup
+	JNINativeMethod native_method;
+	native_method.name = const_cast<char *>(method_info->name.c_str());
+	native_method.signature = const_cast<char *>(method_info->signature.c_str());
+	native_method.fnPtr = native_hook_method;
+
+	if (jnihook->env->RegisterNatives(clazz, &native_method, 1) < 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
 
