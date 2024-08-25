@@ -19,7 +19,9 @@ endif()
 add_library(jnihook STATIC ${JNIHOOK_SRC})
 target_include_directories(jnihook PUBLIC ${JNIHOOK_INC} ${JAVA_INCLUDES})
 set_target_properties(jnihook PROPERTIES POSITION_INDEPENDENT_CODE True)
-target_link_directories(jnihook PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/server")
+# TODO: Add other architectures for OpenJDK8 lookup path
+#       since it uses a non-standard path across platforms ($JAVA_HOME/jre/lib/<ARCH>/server)
+target_link_directories(jnihook PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/server" "${JAVA_HOME}/jre/lib/amd64/server/")
 target_link_libraries(jnihook PUBLIC jvm)
 
 if(JNIHOOK_BUILD_TESTS)
