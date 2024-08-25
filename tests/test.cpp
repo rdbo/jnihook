@@ -1,8 +1,8 @@
 #include <jnihook.h>
 #include "../src/classfile.hpp"
 #include <iostream>
-
-#include <unistd.h> // TODO: REMOVE
+#include <thread>
+#include <chrono>
 
 void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
@@ -72,13 +72,13 @@ start()
 		goto DETACH;
 	}
 
-	std::cout << "SLEEPIN" << std::endl;
-	sleep(2);
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-	std::cout << "AWAKE" << std::endl;
 	if (auto result = JNIHook_Detach(&jnihook, sayHi_mid); result != JNIHOOK_OK) {
 		std::cout << "[*] Failed to detach hook: " << result << std::endl;
 	}
+
+	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
 	JNIHook_Shutdown(&jnihook);
 
