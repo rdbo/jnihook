@@ -155,13 +155,14 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 		return JNIHOOK_ERR_GET_JVMTI;
 	}
 
+	if (jvmti->GetPotentialCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
+		return JNIHOOK_ERR_ADD_JVMTI_CAPS;
+	}
+
 	capabilities.can_redefine_classes = 1;
 	capabilities.can_redefine_any_class = 1;
 	capabilities.can_retransform_classes = 1;
 	capabilities.can_retransform_any_class = 1;
-	if (jvmti->GetPotentialCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
-		return JNIHOOK_ERR_ADD_JVMTI_CAPS;
-	}
 
 	if (jvmti->AddCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_ADD_JVMTI_CAPS;
