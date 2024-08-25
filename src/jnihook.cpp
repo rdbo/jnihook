@@ -258,7 +258,7 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 	return JNIHOOK_OK;
 }
 
-JNIHOOK_API jint JNIHOOK_CALL
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, jclass *original_class)
 {
 	jclass clazz;
@@ -416,7 +416,8 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 	return JNIHOOK_OK;
 }
 
-JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID method)
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
+JNIHook_Detach(jnihook_t *jnihook, jmethodID method)
 {
 	jclass clazz;
 	std::string clazz_name;
@@ -454,7 +455,8 @@ JNIHOOK_API jint JNIHOOK_CALL JNIHook_Detach(jnihook_t *jnihook, jmethodID metho
 }
 
 
-JNIHOOK_API void JNIHOOK_CALL JNIHook_Shutdown(jnihook_t *jnihook)
+JNIHOOK_API void JNIHOOK_CALL
+JNIHook_Shutdown(jnihook_t *jnihook)
 {
 	jvmtiEventCallbacks callbacks = {};
 
