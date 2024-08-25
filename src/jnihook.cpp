@@ -296,8 +296,8 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method)
 
 		auto class_data = cf.bytes();
 
-		// TODO: Use same class loader as original class!
-		class_copy = jnihook->env->DefineClass(class_copy_name.c_str(), NULL,
+		// TODO: Consider using same class loader as original class!
+		class_copy = jnihook->env->DefineClass(NULL, NULL,
 						       reinterpret_cast<const jbyte *>(class_data.data()),
 						       class_data.size());
 		///* TODO: REMOVE!
