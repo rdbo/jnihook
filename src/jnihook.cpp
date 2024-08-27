@@ -431,6 +431,24 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		*original_method = orig;
 	}
 
+	// Suspend other threads while the hook is being set up
+	// jthread curthread;
+	// jthread *threads;
+	// jint thread_count;
+	
+	// if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
+	// 	return JNIHOOK_ERR_JVMTI_OPERATION;
+
+	// if (g_jnihook->jvmti->GetAllThreads(&thread_count, &threads) != JVMTI_ERROR_NONE)
+	// 	return JNIHOOK_ERR_JVMTI_OPERATION;
+
+	for (jint i = 0; i < thread_count; ++i) {
+		if (threads[i] == curthread)
+			continue;
+
+		g_jnihook->jvmti->SuspendThread(threads[i]);
+	}
+
 	// Apply current hooks
 	g_hooks[clazz_name].push_back(hook_info);
 	if (auto result = ReapplyClass(clazz, clazz_name); result != JNIHOOK_OK) {
@@ -446,8 +464,17 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 
 	if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
 		g_hooks[clazz_name].pop_back();
+		ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
+
+	// Resume other threads, hook already placed succesfully
+	// for (jint i = 0; i < thread_count; ++i) {
+	// 	if (threads[i] == curthread)
+	// 		continue;
+
+	// 	g_jnihook->jvmti->ResumeThread(threads[i]);
+	// }
 
 	if (original_class)
 		*original_class = g_original_classes[clazz_name];
