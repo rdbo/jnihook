@@ -415,7 +415,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		jclass orig_class = g_original_classes[clazz_name];
 		jmethodID orig;
 
-		if (method_info->access_flags & ACC_STATIC == ACC_STATIC) {
+		if ((method_info->access_flags & ACC_STATIC) == ACC_STATIC) {
 			orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
 						      method_info->signature.c_str());
 		} else {
