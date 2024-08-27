@@ -25,21 +25,21 @@ void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 	std::cout << "Class: " << clazz << std::endl;
 }
 
+jclass orig_AnotherClass;
+jmethodID orig_AnotherClass_getNumber;
 jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
 {
 	std::cout << "-> GETNUMBER " << std::endl;
 	std::cout << "-> OBJ: " << obj << std::endl;
 
-	jclass orig_class = JNIHook_GetOriginalClass("dummy/AnotherClass");
-	std::cout << "-> Original Class: " << orig_class << std::endl;
+	std::cout << "-> Original Class: " << orig_AnotherClass << std::endl;
 
-	jmethodID orig_getNumber = env->GetMethodID(orig_class, "getNumber", "()I");
-	std::cout << "-> Original getNumber: " << orig_getNumber << std::endl;
+	std::cout << "-> Original getNumber: " << orig_AnotherClass_getNumber << std::endl;
 
 	// NOTE: You must call Nonvirtual method because otherwise Java
 	//       will attempt to call the method closest to the object,
 	//       resulting in a infinitely recursing call and stack overflow.
-	jint real_number = env->CallNonvirtualIntMethod(obj, orig_class, orig_getNumber);
+	jint real_number = env->CallNonvirtualIntMethod(obj, orig_AnotherClass, orig_AnotherClass_getNumber);
 	std::cout << "-> Actual number: " << real_number << std::endl;
 
 	return 1337;
@@ -120,7 +120,10 @@ start()
 	setNumber_mid = env->GetMethodID(another_clazz, "setNumber", "(I)V");
 	std::cout << "[*] AnotherClass.setNumber: " << setNumber_mid << std::endl;
 
-	JNIHook_Attach(getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber), nullptr, nullptr);
+	JNIHook_Attach(getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber),
+		       &orig_AnotherClass_getNumber, &orig_AnotherClass);
+	std::cout << "[*] Original AnotherClass.getNumber: " << orig_AnotherClass_getNumber << std::endl;
+	std::cout << "[*] Original AnotherClass: " << orig_AnotherClass << std::endl;
 
 	JNIHook_Attach(setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr, nullptr);
 

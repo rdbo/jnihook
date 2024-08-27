@@ -37,6 +37,7 @@ typedef struct jnihook_t {
 typedef struct method_info_t {
 	std::string name;
 	std::string signature;
+	jint access_flags;
 } method_info_t;
 
 typedef struct hook_info_t {
@@ -102,8 +103,12 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
 {
 	char *name;
 	char *sig;
+	jint access_flags;
 	
 	if (jvmti->GetMethodName(method, &name, &sig, NULL) != JVMTI_ERROR_NONE)
+		return nullptr;
+
+	if (jvmti->GetMethodModifiers(method, &access_flags) != JVMTI_ERROR_NONE)
 		return nullptr;
 
 	std::string name_str(name, &name[strlen(name)]);
@@ -112,7 +117,7 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
 	jvmti->Deallocate(reinterpret_cast<unsigned char *>(name));
 	jvmti->Deallocate(reinterpret_cast<unsigned char *>(sig));
 
-	return std::make_unique<method_info_t>(method_info_t { name_str, signature_str });
+	return std::make_unique<method_info_t>(method_info_t { name_str, signature_str, access_flags });
 }
 
 JNIHOOK_API jclass JNIHOOK_CALL
@@ -288,15 +293,19 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	hook_info.method_info = *method_info;
 	hook_info.native_hook_method = native_hook_method;
 
-	g_hooks[clazz_name].push_back(hook_info);
-
 	// Force caching of the class being hooked
 	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
 		if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
 			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 		}
 
+		// Temporarily register hook in g_hooks so that `ClassFileLoadHook` can see it
+		// Leaving it there could be a problem if this hook fails, it will still patch
+		// the class when JNIHook_Attach is called again for that same class, but won't
+		// register the native method, causing `java.lang.UnsatisfiedLinkError`.
+		g_hooks[clazz_name].push_back(hook_info);
 		auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
+		g_hooks[clazz_name].pop_back();
 
 		// NOTE: We disable the ClassFileLoadHook here because it breaks
 		//       any `env->DefineClass()` calls. Also, it's not necessary
@@ -401,9 +410,33 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		return JNIHOOK_ERR_CLASS_FILE_CACHE;
 	}
 
+	// Get original method before applying hooks, because this is fallible
+	if (original_method) {
+		jclass orig_class = g_original_classes[clazz_name];
+		jmethodID orig;
+
+		if (method_info->access_flags & ACC_STATIC == ACC_STATIC) {
+			orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
+						      method_info->signature.c_str());
+		} else {
+			orig = env->GetMethodID(orig_class, method_info->name.c_str(),
+						method_info->signature.c_str());
+		}
+
+		if (!orig || env->ExceptionOccurred()) {
+			env->ExceptionClear();
+			return JNIHOOK_ERR_JNI_OPERATION;
+		}
+
+		*original_method = orig;
+	}
+
 	// Apply current hooks
-	if (auto result = ReapplyClass(clazz, clazz_name); result != JNIHOOK_OK)
+	g_hooks[clazz_name].push_back(hook_info);
+	if (auto result = ReapplyClass(clazz, clazz_name); result != JNIHOOK_OK) {
+		g_hooks[clazz_name].pop_back();
 		return result;
+	}
 
 	// Register native method for JVM lookup
 	JNINativeMethod native_method;
@@ -412,13 +445,8 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	native_method.fnPtr = native_hook_method;
 
 	if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
+		g_hooks[clazz_name].pop_back();
 		return JNIHOOK_ERR_JNI_OPERATION;
-	}
-
-	if (original_method) {
-		jclass orig_class = g_original_classes[clazz_name];
-
-		// TODO: GetMethodModifiers, check if is static, set original_method
 	}
 
 	if (original_class)
