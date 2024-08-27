@@ -144,7 +144,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 	auto class_name = get_class_name(jni_env, class_being_redefined);
 
 	// Don't do anything for unhooked classes
-	if (class_name == "" || g_hooks.find(class_name) == g_hooks.end())
+	if (class_name == "" || g_hooks.find(class_name) == g_hooks.end() || g_hooks[class_name].size() == 0)
 		return;
 
 	// Cache parsed ClassFile if it's not cached yet
@@ -477,7 +477,7 @@ JNIHook_Detach(jmethodID method)
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
 
-	if (g_hooks.find(clazz_name) == g_hooks.end()) {
+	if (g_hooks.find(clazz_name) == g_hooks.end() || g_hooks[clazz_name].size() == 0) {
 		return JNIHOOK_OK;
 	}
 
