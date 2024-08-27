@@ -31,7 +31,6 @@
 
 typedef struct jnihook_t {
 	JavaVM   *jvm;
-	JNIEnv   *env;
 	jvmtiEnv *jvmti;
 } jnihook_t;
 
@@ -227,14 +226,9 @@ ReapplyClass(jclass clazz, std::string clazz_name)
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Init(JavaVM *jvm)
 {
-	JNIEnv *env;
 	jvmtiEnv *jvmti;
 	jvmtiCapabilities capabilities;
 	jvmtiEventCallbacks callbacks = {};
-
-	if (jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
-		return JNIHOOK_ERR_GET_JNI;
-	}
 
 	if (jvm->GetEnv(reinterpret_cast<void **>(&jvmti), JVMTI_VERSION_1_2) != JNI_OK) {
 		return JNIHOOK_ERR_GET_JVMTI;
@@ -259,7 +253,7 @@ JNIHook_Init(JavaVM *jvm)
 		return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 	}
 
-	g_jnihook = std::make_unique<jnihook_t>(jnihook_t { jvm, env, jvmti });
+	g_jnihook = std::make_unique<jnihook_t>(jnihook_t { jvm, jvmti });
 
 	return JNIHOOK_OK;
 }
@@ -271,12 +265,17 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	std::string clazz_name;
 	hook_info_t hook_info;
 	jobject class_loader;
+	JNIEnv *env;
+
+	if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
+		return JNIHOOK_ERR_GET_JNI;
+	}
 
 	if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
 
-	clazz_name = get_class_name(g_jnihook->env, clazz);
+	clazz_name = get_class_name(env, clazz);
 	if (clazz_name.length() == 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
@@ -387,9 +386,9 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
 			return JNIHOOK_ERR_JVMTI_OPERATION;
 
-		class_copy = g_jnihook->env->DefineClass(NULL, class_loader,
-						       reinterpret_cast<const jbyte *>(class_data.data()),
-						       class_data.size());
+		class_copy = env->DefineClass(NULL, class_loader,
+					      reinterpret_cast<const jbyte *>(class_data.data()),
+					      class_data.size());
 
 		if (!class_copy)
 			return JNIHOOK_ERR_JNI_OPERATION;
@@ -412,7 +411,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	native_method.signature = const_cast<char *>(method_info->signature.c_str());
 	native_method.fnPtr = native_hook_method;
 
-	if (g_jnihook->env->RegisterNatives(clazz, &native_method, 1) < 0) {
+	if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
 
@@ -431,16 +430,21 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Detach(jmethodID method)
 {
+	JNIEnv *env;
 	jclass clazz;
 	std::string clazz_name;
 	hook_info_t hook_info;
 	jvmtiClassDefinition class_definition;
 
+	if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
+		return JNIHOOK_ERR_GET_JNI;
+	}
+
 	if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
 
-	clazz_name = get_class_name(g_jnihook->env, clazz);
+	clazz_name = get_class_name(env, clazz);
 	if (clazz_name.length() == 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
@@ -467,13 +471,18 @@ JNIHook_Detach(jmethodID method)
 }
 
 
-JNIHOOK_API void JNIHOOK_CALL
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Shutdown()
 {
+	JNIEnv *env;
 	jvmtiEventCallbacks callbacks = {};
 
+	if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
+		return JNIHOOK_ERR_GET_JNI;
+	}
+
 	for (auto &[key, _value] : g_class_file_cache) {
-		jclass clazz = g_jnihook->env->FindClass(key.c_str());
+		jclass clazz = env->FindClass(key.c_str());
 
 		g_hooks[key].clear();
 
@@ -495,5 +504,5 @@ JNIHook_Shutdown()
 
 	g_jnihook = nullptr;
 
-	return;
+	return JNIHOOK_OK;
 }

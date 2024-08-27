@@ -93,7 +93,7 @@ JNIHook_Detach(jmethodID method);
 /**
  * Detaches every hook and shuts down JNIHook
  */
-JNIHOOK_API void JNIHOOK_CALL
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Shutdown();
 
 #ifdef __cplusplus
