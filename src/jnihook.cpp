@@ -29,6 +29,12 @@
 #include "classfile.hpp"
 #include "uuid.hpp"
 
+typedef struct jnihook_t {
+	JavaVM   *jvm;
+	JNIEnv   *env;
+	jvmtiEnv *jvmti;
+} jnihook_t;
+
 typedef struct method_info_t {
 	std::string name;
 	std::string signature;
@@ -39,7 +45,7 @@ typedef struct hook_info_t {
 	void *native_hook_method;
 } hook_info_t;
 
-// TODO: Make the following globals specific to a jnihook_t without breaking C compat
+static std::unique_ptr<jnihook_t> g_jnihook = nullptr;
 static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
 static std::unordered_map<std::string, std::unique_ptr<ClassFile>> g_class_file_cache;
 static std::unordered_map<std::string, jclass> g_original_classes;
@@ -152,7 +158,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 // Patches up a class with the current hooks (if any)
 // and redefines it using JVMTI
 jnihook_result_t
-ReapplyClass(jnihook_t *jnihook, jclass clazz, std::string clazz_name)
+ReapplyClass(jclass clazz, std::string clazz_name)
 {
 	jvmtiClassDefinition class_definition;
 
@@ -212,22 +218,22 @@ ReapplyClass(jnihook_t *jnihook, jclass clazz, std::string clazz_name)
 	class_definition.klass = clazz;
 	class_definition.class_byte_count = cf_bytes.size();
 	class_definition.class_bytes = cf_bytes.data();
-	if (jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
+	if (g_jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 
 	return JNIHOOK_OK;
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
+JNIHook_Init(JavaVM *jvm)
 {
-	JavaVM *jvm;
+	JNIEnv *env;
 	jvmtiEnv *jvmti;
 	jvmtiCapabilities capabilities;
 	jvmtiEventCallbacks callbacks = {};
 
-	if (env->GetJavaVM(&jvm) != JNI_OK) {
-		return JNIHOOK_ERR_GET_JVM;
+	if (jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
+		return JNIHOOK_ERR_GET_JNI;
 	}
 
 	if (jvm->GetEnv(reinterpret_cast<void **>(&jvmti), JVMTI_VERSION_1_2) != JNI_OK) {
@@ -242,6 +248,7 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 	capabilities.can_redefine_any_class = 1;
 	capabilities.can_retransform_classes = 1;
 	capabilities.can_retransform_any_class = 1;
+	capabilities.can_suspend = 1;
 
 	if (jvmti->AddCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_ADD_JVMTI_CAPS;
@@ -252,31 +259,29 @@ JNIHook_Init(JNIEnv *env, jnihook_t *jnihook)
 		return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 	}
 
-	jnihook->jvm = jvm;
-	jnihook->env = env;
-	jnihook->jvmti = jvmti;
+	g_jnihook = std::make_unique<jnihook_t>(jnihook_t { jvm, env, jvmti });
 
 	return JNIHOOK_OK;
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, jclass *original_class)
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class)
 {
 	jclass clazz;
 	std::string clazz_name;
 	hook_info_t hook_info;
 	jobject class_loader;
 
-	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
+	if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
 
-	clazz_name = get_class_name(jnihook->env, clazz);
+	clazz_name = get_class_name(g_jnihook->env, clazz);
 	if (clazz_name.length() == 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
 
-	auto method_info = get_method_info(jnihook->jvmti, method);
+	auto method_info = get_method_info(g_jnihook->jvmti, method);
 	if (!method_info) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
@@ -288,11 +293,11 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 
 	// Force caching of the class being hooked
 	if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-		if (jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+		if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
 			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 		}
 
-		auto result = jnihook->jvmti->RetransformClasses(1, &clazz);
+		auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
 
 		// NOTE: We disable the ClassFileLoadHook here because it breaks
 		//       any `env->DefineClass()` calls. Also, it's not necessary
@@ -300,7 +305,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 		//       uncached hooked classes.
 		// TODO: Investigate why it breaks it (possibly NullPointerException in
 		//       JNIHook_ClassFileLoadHook)
-		if (jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+		if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
 			return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
 		}
 
@@ -379,10 +384,10 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 
 		auto class_data = cf.bytes();
 
-		if (jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
+		if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
 			return JNIHOOK_ERR_JVMTI_OPERATION;
 
-		class_copy = jnihook->env->DefineClass(NULL, class_loader,
+		class_copy = g_jnihook->env->DefineClass(NULL, class_loader,
 						       reinterpret_cast<const jbyte *>(class_data.data()),
 						       class_data.size());
 
@@ -398,7 +403,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 	}
 
 	// Apply current hooks
-	if (auto result = ReapplyClass(jnihook, clazz, clazz_name); result != JNIHOOK_OK)
+	if (auto result = ReapplyClass(clazz, clazz_name); result != JNIHOOK_OK)
 		return result;
 
 	// Register native method for JVM lookup
@@ -407,7 +412,7 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 	native_method.signature = const_cast<char *>(method_info->signature.c_str());
 	native_method.fnPtr = native_hook_method;
 
-	if (jnihook->env->RegisterNatives(clazz, &native_method, 1) < 0) {
+	if (g_jnihook->env->RegisterNatives(clazz, &native_method, 1) < 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
 
@@ -418,18 +423,18 @@ JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, j
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Detach(jnihook_t *jnihook, jmethodID method)
+JNIHook_Detach(jmethodID method)
 {
 	jclass clazz;
 	std::string clazz_name;
 	hook_info_t hook_info;
 	jvmtiClassDefinition class_definition;
 
-	if (jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
+	if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
 
-	clazz_name = get_class_name(jnihook->env, clazz);
+	clazz_name = get_class_name(g_jnihook->env, clazz);
 	if (clazz_name.length() == 0) {
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
@@ -438,7 +443,7 @@ JNIHook_Detach(jnihook_t *jnihook, jmethodID method)
 		return JNIHOOK_OK;
 	}
 
-	auto method_info = get_method_info(jnihook->jvmti, method);
+	auto method_info = get_method_info(g_jnihook->jvmti, method);
 	if (!method_info) {
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 	}
@@ -452,17 +457,17 @@ JNIHook_Detach(jnihook_t *jnihook, jmethodID method)
 		g_hooks[clazz_name].erase(g_hooks[clazz_name].begin() + i);
 	}
 
-	return ReapplyClass(jnihook, clazz, clazz_name);
+	return ReapplyClass(clazz, clazz_name);
 }
 
 
 JNIHOOK_API void JNIHOOK_CALL
-JNIHook_Shutdown(jnihook_t *jnihook)
+JNIHook_Shutdown()
 {
 	jvmtiEventCallbacks callbacks = {};
 
 	for (auto &[key, _value] : g_class_file_cache) {
-		jclass clazz = jnihook->env->FindClass(key.c_str());
+		jclass clazz = g_jnihook->env->FindClass(key.c_str());
 
 		g_hooks[key].clear();
 
@@ -470,7 +475,7 @@ JNIHook_Shutdown(jnihook_t *jnihook)
 			continue;
 
 		// Reapplying the class with empty hooks will just restore the original one.
-		ReapplyClass(jnihook, clazz, key);
+		ReapplyClass(clazz, key);
 	}
 
 	g_class_file_cache.clear();
@@ -479,10 +484,10 @@ JNIHook_Shutdown(jnihook_t *jnihook)
 	//       (if possible without doing crazy hacks)
 	g_original_classes.clear();
 
-	jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
-	jnihook->jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks));
+	g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
+	g_jnihook->jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks));
 
-	memset(jnihook, 0x0, sizeof(*jnihook));
+	g_jnihook = nullptr;
 
 	return;
 }

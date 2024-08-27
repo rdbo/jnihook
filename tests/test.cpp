@@ -66,7 +66,6 @@ start()
 	JavaVM *jvm;
 	JNIEnv *env;
 	jsize jvm_count;
-	jnihook_t jnihook;
 	jclass clazz;
 	jmethodID sayHello_mid;
 	jmethodID sayHi_mid;
@@ -88,15 +87,10 @@ start()
 		return;
 	}
 
-	if (auto result = JNIHook_Init(env, &jnihook); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Init(jvm); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
 		goto DETACH;
 	}
-
-	std::cout << "[*] Helper: jnihook_t { jvm: " <<
-		jnihook.jvm << ", env: " << jnihook.env <<
-		", jvmti: " << jnihook.jvmti << " }" <<
-	std::endl;
 
 	clazz = env->FindClass("dummy/Dummy");
 	std::cout << "[*] Class dummy.Dummy: " << clazz << std::endl;
@@ -107,12 +101,12 @@ start()
 	sayHi_mid = env->GetStaticMethodID(clazz, "sayHi", "()V");
 	std::cout << "[*] Dummy.sayHi: " << sayHi_mid << std::endl;
 
-	if (auto result = JNIHook_Attach(&jnihook, sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), nullptr); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Attach(sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), nullptr, nullptr); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
 
-	if (auto result = JNIHook_Attach(&jnihook, sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi), nullptr); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Attach(sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi), nullptr, nullptr); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
@@ -126,22 +120,22 @@ start()
 	setNumber_mid = env->GetMethodID(another_clazz, "setNumber", "(I)V");
 	std::cout << "[*] AnotherClass.setNumber: " << setNumber_mid << std::endl;
 
-	JNIHook_Attach(&jnihook, getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber), nullptr);
+	JNIHook_Attach(getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber), nullptr, nullptr);
 
-	JNIHook_Attach(&jnihook, setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr);
+	JNIHook_Attach(setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr, nullptr);
 
 	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
 	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-	if (auto result = JNIHook_Detach(&jnihook, sayHi_mid); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Detach(sayHi_mid); result != JNIHOOK_OK) {
 		std::cout << "[*] Failed to detach hook: " << result << std::endl;
 	}
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 
-	JNIHook_Shutdown(&jnihook);
+	JNIHook_Shutdown();
 
 	std::cout << "[*] JNIHook has been shut down" << std::endl;
 

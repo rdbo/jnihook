@@ -33,16 +33,10 @@
 extern "C" {
 #endif
 
-typedef struct jnihook_t {
-	JavaVM   *jvm;
-	JNIEnv   *env;
-	jvmtiEnv *jvmti;
-} jnihook_t;
-
 typedef enum {
 	JNIHOOK_OK = 0,
 
-	JNIHOOK_ERR_GET_JVM,
+	JNIHOOK_ERR_GET_JNI,
 	JNIHOOK_ERR_GET_JVMTI,
 	JNIHOOK_ERR_ADD_JVMTI_CAPS,
 	JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK,
@@ -53,28 +47,27 @@ typedef enum {
 } jnihook_result_t;
 
 /**
- * Initializes a JNIHook context
+ * Initializes the JNIHook library
  *
- * @param env The JNI environment used to initialize the JNIHook context
- * @param jnihook Output variable that will receive the initialized JNIHook context
+ * @param jvm The Java Virtual Machine that will be instrumented by JNIHook
  * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
  */
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Init(JNIEnv *env, jnihook_t *jnihook);
+JNIHook_Init(JavaVM *jvm);
 
 /**
  * Attaches a hook to a Java method
  * NOTE: Native method signatures are as follows:
  *           ReturnType (*fnPtr)(JNIEnv *env, jobject objectOrClass, ...);
  *
- * @param jnihook The JNIHook context
  * @param method The Java method being hooked
  * @param native_hook_method The native method that will be called by the JVM instead of `method`
+ * @param original_method (optional) Output variable that will receive a copy of the original (unhooked) method
  * @param original_class (optional) Output variable that will receive the original (unhooked) class
  * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
  */
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jnihook_t *jnihook, jmethodID method, void *native_hook_method, jclass *original_class);
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class);
 
 /**
  * Gets the original/unhooked class by its name.
@@ -91,20 +84,17 @@ JNIHook_GetOriginalClass(const char *class_name);
 /**
  * Detaches a hook from a Java method
  *
- * @param jnihook The JNIHook context
  * @param method The method being unhooked
  * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
  */
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Detach(jnihook_t *jnihook, jmethodID method);
+JNIHook_Detach(jmethodID method);
 
 /**
  * Detaches every hook and shuts down JNIHook
- *
- * @param jnihook The JNIHook context
  */
 JNIHOOK_API void JNIHOOK_CALL
-JNIHook_Shutdown(jnihook_t *jnihook);
+JNIHook_Shutdown();
 
 #ifdef __cplusplus
 }
