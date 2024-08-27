@@ -416,6 +416,12 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		return JNIHOOK_ERR_JNI_OPERATION;
 	}
 
+	if (original_method) {
+		jclass orig_class = g_original_classes[clazz_name];
+
+		// TODO: GetMethodModifiers, check if is static, set original_method
+	}
+
 	if (original_class)
 		*original_class = g_original_classes[clazz_name];
 
