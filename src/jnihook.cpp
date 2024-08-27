@@ -435,6 +435,8 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	jthread curthread;
 	jthread *threads;
 	jint thread_count;
+
+	env->PushLocalFrame(16);
 	
 	if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -442,6 +444,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	if (g_jnihook->jvmti->GetAllThreads(&thread_count, &threads) != JVMTI_ERROR_NONE)
 		return JNIHOOK_ERR_JVMTI_OPERATION;
 
+	// TODO: Only suspend/resume threads that are actually active
 	for (jint i = 0; i < thread_count; ++i) {
 		if (env->IsSameObject(threads[i], curthread))
 			continue;
@@ -450,10 +453,11 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	}
 
 	// Apply current hooks
+	jnihook_result_t ret;
 	g_hooks[clazz_name].push_back(hook_info);
-	if (auto result = ReapplyClass(clazz, clazz_name); result != JNIHOOK_OK) {
+	if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
 		g_hooks[clazz_name].pop_back();
-		return result;
+		goto RESUME_THREADS;
 	}
 
 	// Register native method for JVM lookup
@@ -465,9 +469,13 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 	if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
 		g_hooks[clazz_name].pop_back();
 		ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
-		return JNIHOOK_ERR_JNI_OPERATION;
+		ret = JNIHOOK_ERR_JNI_OPERATION;
+		goto RESUME_THREADS;
 	}
 
+	ret = JNIHOOK_OK;
+
+RESUME_THREADS:
 	// Resume other threads, hook already placed succesfully
 	for (jint i = 0; i < thread_count; ++i) {
 		if (env->IsSameObject(threads[i], curthread))
@@ -476,10 +484,13 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		g_jnihook->jvmti->ResumeThread(threads[i]);
 	}
 
+	g_jnihook->jvmti->Deallocate(reinterpret_cast<unsigned char *>(threads));
+	env->PopLocalFrame(NULL);
+
 	if (original_class)
 		*original_class = g_original_classes[clazz_name];
 
-	return JNIHOOK_OK;
+	return ret;
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
