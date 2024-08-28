@@ -129,6 +129,8 @@ JNIHook_GetOriginalClass(const char *class_name)
 	return g_original_classes[class_name];
 }
 
+#include <iostream>
+
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 				       JNIEnv* jni_env,
 				       jclass class_being_redefined,
@@ -151,6 +153,8 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 		auto cf = ClassFile::load(class_data);
 		if (!cf)
 			return;
+
+		std::cout << cf->str() << std::endl;
 
 		g_class_file_cache[class_name] = std::move(cf);
 	}

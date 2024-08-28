@@ -234,15 +234,12 @@ public:
 					auto info = reinterpret_cast<CONSTANT_Class_info *>(cpi.bytes.data());
 					ss << "\t\t\t_name_index: " << info->name_index << std::endl;
 					break;
-
-					break;
 				}
-			case CONSTANT_Utf8:
+			case CONSTANT_Fieldref:
 				{
-					CONSTANT_Utf8_info *info = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
-					std::string utf8 = std::string(info->bytes, &info->bytes[info->length]);
-					ss << "\t\t\t_length: " << info->length << std::endl;
-					ss << "\t\t\t_bytes: " << utf8 << std::endl;
+					auto info = reinterpret_cast<CONSTANT_Fieldref_info *>(cpi.bytes.data());
+					ss << "\t\t\t_class_index: " << info->class_index << std::endl;
+					ss << "\t\t\t_name_and_type_index: " << info->name_and_type_index << std::endl;
 					break;
 				}
 			case CONSTANT_Methodref:
@@ -250,6 +247,27 @@ public:
 					auto methodref = reinterpret_cast<CONSTANT_Methodref_info *>(cpi.bytes.data());
 					ss << "\t\t\t_class_index: " << methodref->class_index << std::endl;
 					ss << "\t\t\t_name_and_type_index: " << methodref->name_and_type_index << std::endl;
+					break;
+				}
+			case CONSTANT_InterfaceMethodref:
+				{
+					auto methodref = reinterpret_cast<CONSTANT_InterfaceMethodref_info *>(cpi.bytes.data());
+					ss << "\t\t\t_class_index: " << methodref->class_index << std::endl;
+					ss << "\t\t\t_name_and_type_index: " << methodref->name_and_type_index << std::endl;
+					break;
+				}
+			case CONSTANT_String:
+				{
+					auto info = reinterpret_cast<CONSTANT_String_info *>(cpi.bytes.data());
+					ss << "\t\t\t_string_index: " << info->string_index << std::endl;
+					break;
+				}
+			case CONSTANT_Integer:
+				{
+					// uint32_t value;
+					auto info = reinterpret_cast<CONSTANT_Integer_info *>(cpi.bytes.data());
+					ss << "\t\t\t_bytes: " << info->bytes << std::endl;
+					// ss << "\t\t\t_value: " << value << std::endl;
 					break;
 				}
 			case CONSTANT_Long:
@@ -264,6 +282,16 @@ public:
 					ss << "\t\t\t_value: " << l << std::endl;
 					break;
 				}
+			case CONSTANT_Double:
+				{
+					double d;
+					auto info = reinterpret_cast<CONSTANT_Double_info *>(cpi.bytes.data());
+
+					ss << "\t\t\t_high_bytes: " << std::hex << info->high_bytes << std::dec << std::endl;
+					ss << "\t\t\t_low_bytes: " << std::hex << info->low_bytes << std::dec << std::endl;
+					// ss << "\t\t\t_value: " << l << std::endl;
+					break;
+				}
 			case CONSTANT_NameAndType:
 				{
 					auto info = reinterpret_cast<CONSTANT_NameAndType_info *>(cpi.bytes.data());
@@ -271,10 +299,31 @@ public:
 					ss << "\t\t\t_descriptor_index: " << info->descriptor_index << std::endl;
 					break;
 				}
-			case CONSTANT_Fieldref:
+			case CONSTANT_Utf8:
 				{
-					auto info = reinterpret_cast<CONSTANT_Fieldref_info *>(cpi.bytes.data());
-					ss << "\t\t\t_class_index: " << info->class_index << std::endl;
+					auto info = reinterpret_cast<CONSTANT_Utf8_info *>(cpi.bytes.data());
+					std::string utf8 = std::string(info->bytes, &info->bytes[info->length]);
+					ss << "\t\t\t_length: " << info->length << std::endl;
+					ss << "\t\t\t_bytes: " << utf8 << std::endl;
+					break;
+				}
+			case CONSTANT_MethodHandle:
+				{
+					auto info = reinterpret_cast<CONSTANT_MethodHandle_info *>(cpi.bytes.data());
+					ss << "\t\t\t_reference_kind: " << info->reference_kind << std::endl;
+					ss << "\t\t\t_reference_index: " << info->reference_kind << std::endl;
+					break;
+				}
+			case CONSTANT_MethodType:
+				{
+					auto info = reinterpret_cast<CONSTANT_MethodType_info *>(cpi.bytes.data());
+					ss << "\t\t\t_descriptor_index: " << info->descriptor_index << std::endl;
+					break;
+				}
+			case CONSTANT_InvokeDynamic:
+				{
+					auto info = reinterpret_cast<CONSTANT_InvokeDynamic_info *>(cpi.bytes.data());
+					ss << "\t\t\t_bootstrap_method_attr_index: " << info->bootstrap_method_attr_index << std::endl;
 					ss << "\t\t\t_name_and_type_index: " << info->name_and_type_index << std::endl;
 					break;
 				}
