@@ -129,7 +129,6 @@ JNIHook_GetOriginalClass(const char *class_name)
 	return g_original_classes[class_name];
 }
 
-
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 				       JNIEnv* jni_env,
 				       jclass class_being_redefined,

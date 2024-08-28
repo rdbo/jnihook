@@ -271,6 +271,13 @@ public:
 					ss << "\t\t\t_descriptor_index: " << info->descriptor_index << std::endl;
 					break;
 				}
+			case CONSTANT_Fieldref:
+				{
+					auto info = reinterpret_cast<CONSTANT_Fieldref_info *>(cpi.bytes.data());
+					ss << "\t\t\t_class_index: " << info->class_index << std::endl;
+					ss << "\t\t\t_name_and_type_index: " << info->name_and_type_index << std::endl;
+					break;
+				}
 			}
 
 			ss << "\t\t\t_size: " << cpi.bytes.size() << std::endl;
