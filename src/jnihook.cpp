@@ -432,7 +432,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 
 		if (!orig || env->ExceptionOccurred()) {
 			env->ExceptionClear();
-			return JNIHOOK_ERR_JNI_OPERATION;
+			return JNIHOOK_ERR_JAVA_EXCEPTION;
 		}
 
 		*original_method = orig;
