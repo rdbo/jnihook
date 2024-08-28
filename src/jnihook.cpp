@@ -343,7 +343,14 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 			if (attr_name != "SourceFile")
 				continue;
 
+			u2 attr_index_be = ((attr.attribute_name_index >> 8) & 0xff) |
+			                   ((attr.attribute_name_index & 0xff) << 8);
 			u2 source = *reinterpret_cast<u2 *>(attr.info.data());
+
+			// Some classes have 'SourceFile' attribute be equal to 'SourceFile',
+			// and not 'ClassName.java'. For those, we won't set a custom source.
+			if (source == attr_index_be)
+				break;
 
 			// Overwrite constant pool item
 			CONSTANT_Utf8_info ci;

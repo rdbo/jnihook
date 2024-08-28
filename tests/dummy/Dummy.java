@@ -25,10 +25,21 @@ class AnotherClass {
 }
 
 public class Dummy implements Thing {
+    private class InternalSecretDummy {
+        String secret = "this is super hidden!!!";
+    }
+
+    InternalSecretDummy superSecret;
+
     @Description(value = "This is a field")
     public static int myNumberField = 10;
 
+    public Dummy() {
+        System.out.println("Constructor called!!!");
+    }
+
     public static void sayHello() {
+        Dummy d = new Dummy();
         System.out.println("Hello!!! This is the original function!!!");
     }
 
