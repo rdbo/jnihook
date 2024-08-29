@@ -26,6 +26,7 @@
 #include <vector>
 #include <cstdint>
 #include <cstring>
+#include <tuple>
 #include "classfile.hpp"
 #include "uuid.hpp"
 
@@ -48,7 +49,8 @@ typedef struct hook_info_t {
 static std::unique_ptr<jnihook_t> g_jnihook = nullptr;
 static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
 static std::unordered_map<std::string, std::unique_ptr<ClassFile>> g_class_file_cache;
-static std::unordered_map<std::string, jclass> g_original_classes;
+// Tuple order: class name, method name, method signature
+static std::unordered_map<std::string, std::unique_ptr<void *>> g_original_methods = {};
 
 static std::string
 get_class_signature(jvmtiEnv *jvmti, jclass clazz)
@@ -120,13 +122,10 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
 	return std::make_unique<method_info_t>(method_info_t { name_str, signature_str, access_flags });
 }
 
-JNIHOOK_API jclass JNIHOOK_CALL
-JNIHook_GetOriginalClass(const char *class_name)
+static std::string
+get_method_lookup_key(std::string class_name, std::string method_name, std::string method_signature)
 {
-	if (g_original_classes.find(std::string(class_name)) == g_original_classes.end())
-		return nullptr;
-
-	return g_original_classes[class_name];
+	return class_name + "_" + method_name + "_" + method_signature;
 }
 
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
@@ -263,13 +262,15 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class)
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
 	jclass clazz;
 	std::string clazz_name;
 	hook_info_t hook_info;
 	jobject class_loader;
 	JNIEnv *env;
+	// jmethodID is a double pointer. its inner pointer is the real method.
+	void *orig_method_deref = *reinterpret_cast<void **>(method); 
 
 	if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
 		return JNIHOOK_ERR_GET_JNI;
@@ -324,118 +325,9 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		}
 	}
 
-	// Make copy of the class prior to hooking it
-	// (allows calling the original functions)
-	if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-		std::string class_copy_name = clazz_name + "_" + GenerateUuid();
-		std::string class_shortname = class_copy_name.substr(class_copy_name.find_last_of('/') + 1);
-		std::string class_copy_source_name = class_shortname + ".java";
-		jclass class_copy;
-		auto cf = *g_class_file_cache[clazz_name];
-
-		// Patch source file name (Java will refuse to define the class otherwise)
-		for (auto &attr : cf.get_attributes()) {
-			auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-				cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
-			);
-			auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
-			if (attr_name != "SourceFile")
-				continue;
-
-			u2 attr_index_be = ((attr.attribute_name_index >> 8) & 0xff) |
-			                   ((attr.attribute_name_index & 0xff) << 8);
-			u2 source = *reinterpret_cast<u2 *>(attr.info.data());
-
-			// Some classes have 'SourceFile' attribute be equal to 'SourceFile',
-			// and not 'ClassName.java'. For those, we won't set a custom source.
-			if (source == attr_index_be)
-				break;
-
-			// Overwrite constant pool item
-			CONSTANT_Utf8_info ci;
-			cp_info sourcefile_cpi;
-			ci.tag = CONSTANT_Utf8;
-			ci.length = static_cast<u2>(class_copy_source_name.size());
-
-			sourcefile_cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-			memcpy(sourcefile_cpi.bytes.data(), &ci, sizeof(ci));
-			memcpy(&sourcefile_cpi.bytes.data()[sizeof(ci)], class_copy_source_name.c_str(), ci.length);
-
-			cf.set_constant_pool_item_be(source, sourcefile_cpi);
-		}
-
-		// Patch class name (Java will refuse to define the class otherwise)
-		for (auto &cpi : cf.get_constant_pool()) {
-			if (cpi.bytes[0] != CONSTANT_Class)
-				continue;
-
-			auto class_ci = reinterpret_cast<CONSTANT_Class_info *>(
-				cpi.bytes.data()
-			);
-
-			auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-				cf.get_constant_pool_item(class_ci->name_index).bytes.data()
-			);
-
-			auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
-
-			if (name == clazz_name) {
-				// Overwrite constant pool item
-				CONSTANT_Utf8_info ci;
-				cp_info cpi;
-
-				ci.tag = CONSTANT_Utf8;
-				ci.length = static_cast<u2>(class_copy_name.size());
-
-				cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-				memcpy(&cpi.bytes.data()[sizeof(ci)], class_copy_name.c_str(), ci.length);
-
-				cf.set_constant_pool_item(class_ci->name_index, cpi);
-				break; // TODO: Assure that the ClassName can only happen once per ClassFile!
-			}
-		}
-
-		auto class_data = cf.bytes();
-
-		if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
-			return JNIHOOK_ERR_JVMTI_OPERATION;
-
-		class_copy = env->DefineClass(NULL, class_loader,
-					      reinterpret_cast<const jbyte *>(class_data.data()),
-					      class_data.size());
-
-		if (!class_copy)
-			return JNIHOOK_ERR_JNI_OPERATION;
-
-		g_original_classes[clazz_name] = class_copy;
-	}
-
-	// Verify that everything was cached correctly
-	if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-		return JNIHOOK_ERR_CLASS_FILE_CACHE;
-	}
-
-	// Get original method before applying hooks, because this is fallible
-	if (original_method) {
-		jclass orig_class = g_original_classes[clazz_name];
-		jmethodID orig;
-
-		if ((method_info->access_flags & ACC_STATIC) == ACC_STATIC) {
-			orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
-						      method_info->signature.c_str());
-		} else {
-			orig = env->GetMethodID(orig_class, method_info->name.c_str(),
-						method_info->signature.c_str());
-		}
-
-		if (!orig || env->ExceptionOccurred()) {
-			env->ExceptionClear();
-			return JNIHOOK_ERR_JAVA_EXCEPTION;
-		}
-
-		*original_method = orig;
-	}
+	// Store original method dereference in a new allocation
+	std::string method_lookup_key = get_method_lookup_key(clazz_name, method_info->name, method_info->signature);
+	g_original_methods[method_lookup_key] = std::make_unique<void *>(orig_method_deref);
 
 	// Suspend other threads while the hook is being set up
 	jthread curthread;
@@ -479,6 +371,11 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		goto RESUME_THREADS;
 	}
 
+	// Save the pointer to the original method dereference in 'original_method'
+	if (original_method) {
+		*original_method = reinterpret_cast<jmethodID>(g_original_methods[method_lookup_key].get());
+	}
+
 	ret = JNIHOOK_OK;
 
 RESUME_THREADS:
@@ -492,9 +389,6 @@ RESUME_THREADS:
 
 	g_jnihook->jvmti->Deallocate(reinterpret_cast<unsigned char *>(threads));
 	env->PopLocalFrame(NULL);
-
-	if (original_class)
-		*original_class = g_original_classes[clazz_name];
 
 	return ret;
 }
@@ -537,6 +431,8 @@ JNIHook_Detach(jmethodID method)
 			continue;
 
 		g_hooks[clazz_name].erase(g_hooks[clazz_name].begin() + i);
+		g_original_methods.erase(get_method_lookup_key(clazz_name, method_info->name, method_info->signature));
+		break;
 	}
 
 	return ReapplyClass(clazz, clazz_name);
@@ -567,9 +463,7 @@ JNIHook_Shutdown()
 
 	g_class_file_cache.clear();
 
-	// TODO: Fully cleanup defined classes in `g_original_classes` by deleting them from the JVM memory
-	//       (if possible without doing crazy hacks)
-	g_original_classes.clear();
+	g_original_methods.clear();
 
 	g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
 	g_jnihook->jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks));

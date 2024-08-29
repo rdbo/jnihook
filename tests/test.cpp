@@ -3,18 +3,17 @@
 #include <thread>
 #include <chrono>
 
+jmethodID orig_sayHello;
 void JNICALL hk_Dummy_sayHello(JNIEnv *env, jclass clazz)
 {
 	std::cout << "Dummy.sayHello hook called!" << std::endl;
 	std::cout << "JNIEnv: " << env << std::endl;
 	std::cout << "Class: " << clazz << std::endl;
 
-	jclass orig_Dummy = JNIHook_GetOriginalClass("dummy/Dummy");
-	jmethodID orig_sayHello = env->GetStaticMethodID(orig_Dummy, "sayHello", "()V");
 	std::cout << "Original 'sayHello': " << orig_sayHello << std::endl;
 
 	std::cout << "Calling original sayHello..." << std::endl;
-	env->CallStaticVoidMethod(orig_Dummy, orig_sayHello);
+	env->CallStaticVoidMethod(clazz, orig_sayHello);
 	std::cout << "Called original sayHello!" << std::endl;
 }
 
@@ -25,39 +24,32 @@ void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 	std::cout << "Class: " << clazz << std::endl;
 }
 
-jclass orig_AnotherClass;
+jclass another_clazz;
 jmethodID orig_AnotherClass_getNumber;
 jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
 {
 	std::cout << "-> GETNUMBER " << std::endl;
 	std::cout << "-> OBJ: " << obj << std::endl;
 
-	std::cout << "-> Original Class: " << orig_AnotherClass << std::endl;
-
 	std::cout << "-> Original getNumber: " << orig_AnotherClass_getNumber << std::endl;
 
-	// NOTE: You must call Nonvirtual method because otherwise Java
-	//       will attempt to call the method closest to the object,
-	//       resulting in a infinitely recursing call and stack overflow.
-	jint real_number = env->CallNonvirtualIntMethod(obj, orig_AnotherClass, orig_AnotherClass_getNumber);
+	jint real_number = env->CallIntMethod(obj, orig_AnotherClass_getNumber);
 	std::cout << "-> Actual number: " << real_number << std::endl;
 
 	return 1337;
 }
 
+jmethodID orig_setNumber;
 void JNICALL hk_AnotherClass_setNumber(JNIEnv *env, jobject obj, jint number)
 {
 	std::cout << "-> SETNUMBER " << std::endl;
 	std::cout << "-> OBJ: " << obj << std::endl;
 
-	jclass orig_class = JNIHook_GetOriginalClass("dummy/AnotherClass");
-	std::cout << "-> Original Class: " << orig_class << std::endl;
-	jmethodID orig_setNumber = env->GetMethodID(orig_class, "setNumber", "(I)V");
 	std::cout << "-> Original setNumber: " << orig_setNumber << std::endl;
 
 	std::cout << "-> Expected number: " << number << std::endl;
 
-	env->CallNonvirtualIntMethod(obj, orig_class, orig_setNumber, 42);
+	env->CallVoidMethod(obj, orig_setNumber, 42);
 }
 
 void
@@ -69,7 +61,6 @@ start()
 	jclass clazz;
 	jmethodID sayHello_mid;
 	jmethodID sayHi_mid;
-	jclass another_clazz;
 	jmethodID getNumber_mid;
 	jmethodID setNumber_mid;
 
@@ -101,12 +92,12 @@ start()
 	sayHi_mid = env->GetStaticMethodID(clazz, "sayHi", "()V");
 	std::cout << "[*] Dummy.sayHi: " << sayHi_mid << std::endl;
 
-	if (auto result = JNIHook_Attach(sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), nullptr, nullptr); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Attach(sayHello_mid, reinterpret_cast<void *>(hk_Dummy_sayHello), &orig_sayHello); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
 
-	if (auto result = JNIHook_Attach(sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi), nullptr, nullptr); result != JNIHOOK_OK) {
+	if (auto result = JNIHook_Attach(sayHi_mid, reinterpret_cast<void *>(hk_Dummy_sayHi), nullptr); result != JNIHOOK_OK) {
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
@@ -121,11 +112,9 @@ start()
 	std::cout << "[*] AnotherClass.setNumber: " << setNumber_mid << std::endl;
 
 	JNIHook_Attach(getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber),
-		       &orig_AnotherClass_getNumber, &orig_AnotherClass);
-	std::cout << "[*] Original AnotherClass.getNumber: " << orig_AnotherClass_getNumber << std::endl;
-	std::cout << "[*] Original AnotherClass: " << orig_AnotherClass << std::endl;
+		       &orig_AnotherClass_getNumber);
 
-	JNIHook_Attach(setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), nullptr, nullptr);
+	JNIHook_Attach(setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), &orig_setNumber);
 
 	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
 	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;
