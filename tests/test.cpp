@@ -60,6 +60,15 @@ void JNICALL hk_AnotherClass_setNumber(JNIEnv *env, jobject obj, jint number)
 	env->CallNonvirtualIntMethod(obj, orig_class, orig_setNumber, 42);
 }
 
+jobject orig_yetAnotherObj;
+jobject yet_another_obj;
+jobject JNICALL hk_YetAnotherClass_getInstance(JNIEnv *env, jclass clazz)
+{
+	std::cout << "[*] YetAnotherClass.getInstance() hook called!!!!!!!" << std::endl;
+
+	return yet_another_obj;
+}
+
 void
 start()
 {
@@ -72,6 +81,10 @@ start()
 	jclass another_clazz;
 	jmethodID getNumber_mid;
 	jmethodID setNumber_mid;
+	jclass yet_another_clazz;
+	jmethodID init_mid;
+	jmethodID getInstance_mid;
+	jmethodID getSecretNumber_mid;
 
 	std::cout << "[*] Library loaded!" << std::endl;
 
@@ -129,6 +142,31 @@ start()
 
 	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
 	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;
+
+	// YetAnotherClass hook
+	yet_another_clazz = env->FindClass("dummy/YetAnotherClass");
+	std::cout << "[*] Class dummy.YetAnotherClass: " << yet_another_clazz << std::endl;
+
+	init_mid = env->GetMethodID(yet_another_clazz, "<init>", "(I)V");
+	std::cout << "[*] YetAnotherClass.<init>: " << init_mid << std::endl;
+
+	getSecretNumber_mid = env->GetMethodID(yet_another_clazz, "getSecretNumber", "()I");
+	std::cout << "[*] YetAnotherClass.getSecretNumber: " << getSecretNumber_mid << std::endl;
+
+	getInstance_mid = env->GetStaticMethodID(yet_another_clazz, "getInstance", "()Ldummy/YetAnotherClass;");
+	std::cout << "[*] YetAnotherClass.getInstance: " << getInstance_mid << std::endl;
+
+	yet_another_obj = env->NewObject(yet_another_clazz, init_mid, 1337);
+	std::cout << "[*] Yet another object: " << yet_another_obj << std::endl;
+
+	std::cout << "[*] YAO's Secret number: " << env->CallIntMethod(yet_another_obj, getSecretNumber_mid) << std::endl;
+
+	orig_yetAnotherObj = env->CallStaticObjectMethod(yet_another_clazz, getInstance_mid);
+	std::cout << "[*] Original yetAnotherObj: " << orig_yetAnotherObj << std::endl;
+
+	std::cout << "[*] Original YAO's Secret number: " << env->CallIntMethod(orig_yetAnotherObj, getSecretNumber_mid) << std::endl;
+
+	std::cout << "[*] JNIHook_Attach: " << JNIHook_Attach(getInstance_mid, reinterpret_cast<void *>(hk_YetAnotherClass_getInstance), nullptr, nullptr) << std::endl;
 
 	std::this_thread::sleep_for(std::chrono::milliseconds(2000));
 

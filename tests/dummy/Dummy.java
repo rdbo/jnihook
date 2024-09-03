@@ -24,6 +24,24 @@ class AnotherClass {
     }
 }
 
+class YetAnotherClass {
+    public static YetAnotherClass instance = new YetAnotherClass(10);
+
+    private int secretNumber;
+
+    public YetAnotherClass(int secretNumber) {
+        this.secretNumber = secretNumber;
+    }
+
+    public static YetAnotherClass getInstance() {
+        return instance;
+    }
+
+    public int getSecretNumber() {
+        return this.secretNumber;
+    }
+}
+
 public class Dummy implements Thing {
     private class InternalSecretDummy {
         String secret = "this is super hidden!!!";
@@ -64,6 +82,9 @@ public class Dummy implements Thing {
         AnotherClass obj = new AnotherClass();
         obj.setNumber(10);
         System.out.println("-> My Number: " + obj.getNumber());
+
+        YetAnotherClass yetAnotherObj = YetAnotherClass.getInstance();
+        System.out.println("=>> OMG!!!! The secret number is: " + yetAnotherObj.getSecretNumber());
 
         while (true) {
             sayHello();
