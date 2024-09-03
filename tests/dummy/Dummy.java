@@ -29,8 +29,11 @@ class YetAnotherClass {
 
     private int secretNumber;
 
+    private ChildClass childObj;
+
     public YetAnotherClass(int secretNumber) {
         this.secretNumber = secretNumber;
+        this.childObj = new ChildClass();
     }
 
     public static YetAnotherClass getInstance() {
@@ -39,6 +42,14 @@ class YetAnotherClass {
 
     public int getSecretNumber() {
         return this.secretNumber;
+    }
+
+    public char getLetter() {
+        return this.childObj.someLetter;
+    }
+
+    class ChildClass {
+        char someLetter = 'A';
     }
 }
 
