@@ -120,15 +120,6 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
 	return std::make_unique<method_info_t>(method_info_t { name_str, signature_str, access_flags });
 }
 
-JNIHOOK_API jclass JNIHOOK_CALL
-JNIHook_GetOriginalClass(const char *class_name)
-{
-	if (g_original_classes.find(std::string(class_name)) == g_original_classes.end())
-		return nullptr;
-
-	return g_original_classes[class_name];
-}
-
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 				       JNIEnv* jni_env,
 				       jclass class_being_redefined,
@@ -263,7 +254,7 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class)
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
 	jclass clazz;
 	std::string clazz_name;
@@ -492,9 +483,6 @@ RESUME_THREADS:
 
 	g_jnihook->jvmti->Deallocate(reinterpret_cast<unsigned char *>(threads));
 	env->PopLocalFrame(NULL);
-
-	if (original_class)
-		*original_class = g_original_classes[clazz_name];
 
 	return ret;
 }

@@ -68,19 +68,7 @@ JNIHook_Init(JavaVM *jvm);
  * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
  */
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class);
-
-/**
- * Gets the original/unhooked class by its name.
- * You can use this to call the original methods of
- * a hooked class, just like you would call a regular
- * class method.
- *
- * @param class_name The name of the hooked class
- * @return A valid pointer on success, `nullptr` on error.
- */
-JNIHOOK_API jclass JNIHOOK_CALL
-JNIHook_GetOriginalClass(const char *class_name);
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method);
 
 /**
  * Detaches a hook from a Java method
