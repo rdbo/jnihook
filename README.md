@@ -11,18 +11,15 @@ Read the file `LICENSE` for more information.
 ## Example
 Hooking the function `static int myFunction(int mynumber, String name)` from a class `Dummy`:
 ```c++
+jmethodID originalMethod;
 jint hkMyFunction(JNIEnv *env, jclass clazz, jint number, jstring name)
 {
 	// Print parameters
 	std::cout << "[*] mynumber value: " << mynumber << std::endl;
 	std::cout << "[*] name object: " << name << std::endl;
 
-	// Get unhooked class for accessing original methods
-	jclass originalClass = JNIHook_GetOriginalClass("dummy/Dummy");
-	jmethodID originalMethod = env->GetStaticMethodID(originalClass, "myFunction", "(Ljava/lang/String;)I");
-
 	// Call the original method with 'mynumber' set to '1337'
-	env->CallStaticIntMethod(dummyClass, callableMethod, 1337, name);
+	env->CallStaticIntMethod(dummyClass, originalMethod, 1337, name);
 
 	return 42; // Modify the return value to '42'
 }
@@ -34,7 +31,7 @@ void start(JavaVM *jvm)
 							"(ILjava/lang/String;)I");
 
 	JNIHook_Init(jvm);
-	JNIHook_Attach(myFunctionID, hkMyFunction, NULL, NULL);
+	JNIHook_Attach(myFunctionID, hkMyFunction, &originalMethod);
 }
 ```
 
