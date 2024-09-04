@@ -64,7 +64,6 @@ JNIHook_Init(JavaVM *jvm);
  * @param method The Java method being hooked
  * @param native_hook_method The native method that will be called by the JVM instead of `method`
  * @param original_method (optional) Output variable that will receive a copy of the original (unhooked) method
- * @param original_class (optional) Output variable that will receive the original (unhooked) class
  * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
  */
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
