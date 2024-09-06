@@ -402,11 +402,14 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 				cf.get_constant_pool_item(nt_ci->descriptor_index).bytes.data()
 			);
 			auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-			if (descriptor == std::string("L") + clazz_name + ";") {
+
+			std::string clazz_desc = std::string("L") + clazz_name + ";";
+			std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
+			if (auto index = descriptor.find(clazz_desc); index != descriptor.npos) {
 				// Overwrite constant pool item
 				CONSTANT_Utf8_info ci;
 				cp_info cpi;
-				std::string new_descriptor = std::string("L") + class_copy_name + ";";
+				std::string new_descriptor = descriptor.replace(index, clazz_desc.size(), clazz_copy_desc);
 
 				ci.tag = CONSTANT_Utf8;
 				ci.length = static_cast<u2>(new_descriptor.size());
