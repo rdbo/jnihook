@@ -36,6 +36,12 @@ class YetAnotherClass {
         this.childObj = new ChildClass();
     }
 
+    public YetAnotherClass(YetAnotherClass obj) {
+        this.secretNumber = obj.secretNumber;
+        this.childObj = new ChildClass();
+        this.childObj.someLetter = obj.childObj.someLetter;
+    }
+
     public static YetAnotherClass getInstance() {
         return instance;
     }
@@ -46,6 +52,10 @@ class YetAnotherClass {
 
     public char getLetter() {
         return this.childObj.someLetter;
+    }
+
+    public static YetAnotherClass copy() {
+        return new YetAnotherClass(getInstance());
     }
 
     class ChildClass {
@@ -94,7 +104,7 @@ public class Dummy implements Thing {
         obj.setNumber(10);
         System.out.println("-> My Number: " + obj.getNumber());
 
-        YetAnotherClass yetAnotherObj = YetAnotherClass.getInstance();
+        YetAnotherClass yetAnotherObj = YetAnotherClass.copy();
         System.out.println("=>> OMG!!!! The secret number is: " + yetAnotherObj.getSecretNumber());
 
         while (true) {

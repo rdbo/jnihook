@@ -25,14 +25,11 @@ void JNICALL hk_Dummy_sayHi(JNIEnv *env, jclass clazz)
 }
 
 jclass another_clazz;
-jclass orig_AnotherClass;
 jmethodID orig_AnotherClass_getNumber;
 jint JNICALL hk_AnotherClass_getNumber(JNIEnv *env, jobject obj)
 {
 	std::cout << "-> GETNUMBER " << std::endl;
 	std::cout << "-> OBJ: " << obj << std::endl;
-
-	std::cout << "-> Original Class: " << orig_AnotherClass << std::endl;
 
 	std::cout << "-> Original getNumber: " << orig_AnotherClass_getNumber << std::endl;
 
@@ -133,7 +130,6 @@ start()
 	JNIHook_Attach(getNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_getNumber),
 		       &orig_AnotherClass_getNumber);
 	std::cout << "[*] Original AnotherClass.getNumber: " << orig_AnotherClass_getNumber << std::endl;
-	std::cout << "[*] Original AnotherClass: " << orig_AnotherClass << std::endl;
 
 	JNIHook_Attach(setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), &orig_setNumber);
 
