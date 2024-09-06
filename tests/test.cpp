@@ -1,4 +1,5 @@
 #include <jnihook.h>
+#include <jnihook.hpp>
 #include <iostream>
 #include <thread>
 #include <chrono>
@@ -131,7 +132,8 @@ start()
 		       &orig_AnotherClass_getNumber);
 	std::cout << "[*] Original AnotherClass.getNumber: " << orig_AnotherClass_getNumber << std::endl;
 
-	JNIHook_Attach(setNumber_mid, reinterpret_cast<void *>(hk_AnotherClass_setNumber), &orig_setNumber);
+	// No need to cast when using <jnihook.hpp>. Requires C++ >= 23
+	orig_setNumber = jnihook::attach(setNumber_mid, hk_AnotherClass_setNumber).value();
 
 	getNumber_mid = env->GetMethodID(another_clazz, "getNumber", "()I");
 	std::cout << "[*] AnotherClass.getNumber (post hook): " << getNumber_mid << std::endl;

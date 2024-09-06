@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.21)
 
 project(jnihook LANGUAGES C CXX)
 
+set (CMAKE_CXX_STANDARD 23) # Only necessary for <jnihook.hpp>. If you will use <jnihook.h> only, C++ 11 is fine.
 set(JAVA_HOME $ENV{JAVA_HOME} CACHE STRING "Set JAVA_HOME for dependency lookup")
 option(JNIHOOK_BUILD_TESTS "Enable building of tests" OFF)
 
