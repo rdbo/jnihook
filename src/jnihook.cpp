@@ -387,6 +387,38 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 			}
 		}
 
+		// Patch NameAndType things that instance the current class
+		// NOTE: This is an attempt to fix the following exception when
+		//       trying to get the method ID after defining the class:
+		//
+		// Type 'OrigClass' (current frame, stack[0]) is not assignable to 'OrigClass_<UUID>'
+		auto constant_pool = cf.get_constant_pool();
+		for (auto &item : constant_pool) {
+			if (item.bytes[0] != CONSTANT_NameAndType)
+				continue;
+
+			auto nt_ci = reinterpret_cast<CONSTANT_NameAndType_info *>(item.bytes.data());
+			auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
+				cf.get_constant_pool_item(nt_ci->descriptor_index).bytes.data()
+			);
+			auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
+			if (descriptor == std::string("L") + clazz_name + ";") {
+				// Overwrite constant pool item
+				CONSTANT_Utf8_info ci;
+				cp_info cpi;
+				std::string new_descriptor = std::string("L") + class_copy_name + ";";
+
+				ci.tag = CONSTANT_Utf8;
+				ci.length = static_cast<u2>(new_descriptor.size());
+
+				cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
+				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
+				memcpy(&cpi.bytes.data()[sizeof(ci)], new_descriptor.c_str(), ci.length);
+
+				cf.set_constant_pool_item(nt_ci->descriptor_index, cpi);
+			}
+		}
+
 		auto class_data = cf.bytes();
 
 		if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
