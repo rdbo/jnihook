@@ -254,7 +254,7 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class)
 {
 	jclass clazz;
 	std::string clazz_name;
@@ -421,6 +421,39 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 				cf.set_constant_pool_item(nt_ci->descriptor_index, cpi);
 			}
 		}
+		
+		// Not every Type or return Type is referenced by a NameAndType
+		// So we have to check the method descriptors as well
+		auto methods = cf.get_methods();
+		for (auto& method : methods)
+		{
+			auto descriptor_index = method.descriptor_index;
+
+			auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info*>(
+				cf.get_constant_pool_item(descriptor_index).bytes.data()
+				);
+
+			auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
+
+			std::string clazz_desc = std::string("L") + clazz_name + ";";
+			std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
+
+			if (auto index = descriptor.find(clazz_desc); index != descriptor.npos)
+			{
+				CONSTANT_Utf8_info ci;
+				cp_info cpi;
+				std::string new_descriptor = descriptor.replace(index, clazz_desc.size(), clazz_copy_desc);
+
+				ci.tag = CONSTANT_Utf8;
+				ci.length = static_cast<u2>(new_descriptor.size());
+
+				cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
+				memcpy(cpi.bytes.data(), &ci, sizeof(ci));
+				memcpy(&cpi.bytes.data()[sizeof(ci)], new_descriptor.c_str(), ci.length);
+
+				cf.set_constant_pool_item(descriptor_index, cpi);
+			}
+		}
 
 		auto class_data = cf.bytes();
 
@@ -461,6 +494,11 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		}
 
 		*original_method = orig;
+	}
+
+	// Returning original class to call the method properly with the original class
+	if (original_class) {
+		*original_class = g_original_classes[clazz_name];
 	}
 
 	// Suspend other threads while the hook is being set up
