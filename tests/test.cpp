@@ -4,10 +4,13 @@
 #include <thread>
 #include <chrono>
 
+jclass Target_class;
 jmethodID orig_Target_sayHello;
 void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
 	std::cout << "Target::sayHello HOOK CALLED!" << std::endl;
+	std::cout << "Calling original method..." << std::endl;
+	jni->CallNonvirtualVoidMethod(obj, Target_class, orig_Target_sayHello);
 }
 
 void
@@ -16,7 +19,6 @@ start()
 	JavaVM *jvm;
 	JNIEnv *env;
 	jsize jvm_count;
-	jclass Target_class;
 	jmethodID Target_sayHello_mid;
 
 	// Setup JVM
