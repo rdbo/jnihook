@@ -20,7 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <jnihook.hpp>
+#include <jnihook.h>
 #include <unordered_map>
 #include <string>
 #include <vector>
