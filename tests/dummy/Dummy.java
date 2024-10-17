@@ -18,7 +18,6 @@ public class Dummy {
         System.out.flush();
         System.in.read();
 
-        // Target target = Target.newTarget();
         Target target = Target.newTarget();
         target.sayHello();
     }
