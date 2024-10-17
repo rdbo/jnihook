@@ -6,7 +6,7 @@
 
 jclass Target_class;
 jmethodID orig_Target_sayHello;
-void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
+JNIEXPORT void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
 	std::cout << "Target::sayHello HOOK CALLED!" << std::endl;
 	std::cout << "Calling original method..." << std::endl;
@@ -53,6 +53,8 @@ start()
 		std::cerr << "[!] Failed to attach hook: " << result << std::endl;
 		goto DETACH;
 	}
+
+	std::cout << "[*] Hooks attached" << std::endl;
 
 	// JNIHook_Shutdown();
 	// std::cout << "[*] JNIHook has been shut down" << std::endl;

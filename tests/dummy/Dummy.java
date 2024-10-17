@@ -18,11 +18,24 @@ class Target {
 
 public class Dummy {
     public static void main(String[] args) throws IOException {
-        System.out.print("Press [ENTER] to begin running...");
-        System.out.flush();
+        System.out.println();
+        System.out.println("Press [ENTER] to begin testing...");
+        System.out.println("(wait for the library to load!)");
+        System.out.println();
+
+        if (args.length == 0) {
+            System.out.println("Missing library path!");
+            System.exit(-1);
+        } else {
+            System.out.println("Loading library...");
+            System.load(args[0]);
+        }
+
         System.in.read();
 
         Target target = Target.returnTarget(Target.newTarget());
         target.sayHello();
+
+        System.out.println("Done!");
     }
 }
