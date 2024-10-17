@@ -254,7 +254,7 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, jclass *original_class)
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
 	jclass clazz;
 	std::string clazz_name;
@@ -494,11 +494,6 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		}
 
 		*original_method = orig;
-	}
-
-	// Returning original class to call the method properly with the original class
-	if (original_class) {
-		*original_class = g_original_classes[clazz_name];
 	}
 
 	// Suspend other threads while the hook is being set up
