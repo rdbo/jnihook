@@ -7,6 +7,10 @@ class Target {
         return new Target();
     }
 
+    public static Target returnTarget(Target t) {
+        return t;
+    }
+
     public void sayHello() {
         System.out.println("Hello from Target object!");
     }
@@ -18,7 +22,7 @@ public class Dummy {
         System.out.flush();
         System.in.read();
 
-        Target target = Target.newTarget();
+        Target target = Target.returnTarget(Target.newTarget());
         target.sayHello();
     }
 }

@@ -421,9 +421,10 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 				cf.set_constant_pool_item(nt_ci->descriptor_index, cpi);
 			}
 		}
-		
-		// Not every Type or return Type is referenced by a NameAndType
-		// So we have to check the method descriptors as well
+
+		// Patch method descriptors
+		// NOTE: Not every Type or return Type is referenced by a NameAndType
+		//       So we have to check the method descriptors as well
 		auto methods = cf.get_methods();
 		for (auto& method : methods)
 		{
@@ -438,7 +439,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 			std::string clazz_desc = std::string("L") + clazz_name + ";";
 			std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
 
-			if (auto index = descriptor.find(clazz_desc); index != descriptor.npos)
+			for (size_t index; (index = descriptor.find(clazz_desc)) != descriptor.npos;)
 			{
 				CONSTANT_Utf8_info ci;
 				cp_info cpi;
