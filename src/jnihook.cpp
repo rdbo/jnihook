@@ -456,6 +456,37 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 			}
 		}
 
+		// Make our class extend the original one
+		// TODO: Make the original class non-final, otherwise
+		//       it can't be inherited!
+		CONSTANT_Class_info class_info;
+		CONSTANT_Utf8_info name_info;
+		cp_info cpi;
+
+		size_t old_cpc = cf.get_constant_pool_count();
+		cf.set_constant_pool_count(cf.get_constant_pool_count() + 2);
+
+		std::string super_class_name = clazz_name;
+		name_info.tag = CONSTANT_Utf8;
+		name_info.length = static_cast<u2>(super_class_name.size());
+
+		cpi.bytes = std::vector<uint8_t>(sizeof(name_info) + name_info.length);
+		memcpy(cpi.bytes.data(), &name_info, sizeof(name_info));
+		memcpy(&cpi.bytes.data()[sizeof(name_info)], super_class_name.c_str(), name_info.length);
+
+		u2 name_index = static_cast<u2>(old_cpc);
+		cf.get_constant_pool().push_back(cpi);
+
+		u2 class_index = static_cast<u2>(old_cpc + 1);
+		class_info.tag = CONSTANT_Class;
+		class_info.name_index = name_index;
+		cpi.bytes = std::vector<uint8_t>(sizeof(class_info));
+		memcpy(cpi.bytes.data(), &class_info, sizeof(class_info));
+		cf.get_constant_pool().push_back(cpi);
+
+		cf.set_super_class_index(class_index);
+
+		// Generate ClassFile bytes and define copy class
 		auto class_data = cf.bytes();
 
 		if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
@@ -490,6 +521,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 		}
 
 		if (!orig || env->ExceptionOccurred()) {
+			env->ExceptionDescribe();
 			env->ExceptionClear();
 			return JNIHOOK_ERR_JAVA_EXCEPTION;
 		}

@@ -188,6 +188,7 @@ private:
 	u2 minor;
 	u2 major;
 	size_t constant_pool_count; // Don't trust this value. It is very tricky. Used only for bytes generation.
+				    // TODO: Autogenerate `constant_pool_count` based on `constant_pool`
 	std::vector<cp_info> constant_pool;
 	u2 access_flags;
 	u2 this_class;
@@ -496,6 +497,8 @@ public:
 		this->constant_pool[index] = value;
 	}
 
+	// TODO: Fix this function, as it will have issues indexing
+	//       due to some constant pool types "occupying" two indices
 	inline void set_constant_pool_item_be(u2 index, cp_info value)
 	{
 		u1 lo = index >> 8;
@@ -503,6 +506,20 @@ public:
 		u2 le = (hi << 8) | lo;
 
 		this->set_constant_pool_item(le, value);
+	}
+
+	inline void set_constant_pool_count(size_t count)
+	{
+		this->constant_pool_count = count;
+	}
+
+	inline void set_super_class_index(u2 index)
+	{
+		u1 lo = index >> 8;
+		u1 hi = index & 0xff;
+		u2 le = (hi << 8) | lo;
+
+		this->super_class = index;
 	}
 };
 
