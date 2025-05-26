@@ -6,6 +6,12 @@ set (CMAKE_CXX_STANDARD 23) # Only necessary for <jnihook.hpp>. If you will use 
 set(JAVA_HOME $ENV{JAVA_HOME} CACHE STRING "Set JAVA_HOME for dependency lookup")
 option(JNIHOOK_BUILD_TESTS "Enable building of tests" OFF)
 
+set(JCFP_DIR "${PROJECT_SOURCE_DIR}/external/jcfp")
+set(JCFP_INC "${PROJECT_SOURCE_DIR}/external/jcfp/include")
+file(GLOB_RECURSE JCFP_SRC "${PROJECT_SOURCE_DIR}/external/jcfp/src/*.cpp")
+add_library(jcfp STATIC ${JCFP_SRC})
+target_include_directories(jcfp PUBLIC ${JCFP_INC})
+
 set(JNIHOOK_DIR "${PROJECT_SOURCE_DIR}/src")
 set(JNIHOOK_INC "${PROJECT_SOURCE_DIR}/include")
 file(GLOB_RECURSE JNIHOOK_SRC "${JNIHOOK_DIR}/*.cpp")
@@ -18,12 +24,12 @@ else()
 endif()
 
 add_library(jnihook STATIC ${JNIHOOK_SRC})
-target_include_directories(jnihook PUBLIC ${JNIHOOK_INC} ${JAVA_INCLUDES})
+target_include_directories(jnihook PUBLIC ${JNIHOOK_INC} ${JAVA_INCLUDES} ${JCFP_INC})
 set_target_properties(jnihook PROPERTIES POSITION_INDEPENDENT_CODE True)
 # TODO: Add other architectures for OpenJDK8 lookup path
 #       since it uses a non-standard path across platforms ($JAVA_HOME/jre/lib/<ARCH>/server)
 target_link_directories(jnihook PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/server" "${JAVA_HOME}/jre/lib/amd64/server/")
-target_link_libraries(jnihook PUBLIC jvm)
+target_link_libraries(jnihook PUBLIC jvm jcfp)
 
 if(JNIHOOK_BUILD_TESTS)
 	# Build Java classes
