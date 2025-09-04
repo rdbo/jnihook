@@ -16,7 +16,7 @@ if("${JAVA_HOME}" STREQUAL "")
 endif()
 
 if("${CMAKE_SYSTEM_NAME}" STREQUAL "Windows")
-	set(JAVA_INCLUDES ${JAVA_INCLUDES} "${JAVA_HOME}/include/windows")
+	set(JAVA_INCLUDES ${JAVA_INCLUDES} "${JAVA_HOME}/include/win32")
 
 	enable_language(ASM_MASM)
 	set(JNIHOOK_SRC ${JNIHOOK_SRC} "${JNIHOOK_DIR}/gateway-win-x86_64.asm")
