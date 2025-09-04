@@ -47,6 +47,7 @@ if(JNIHOOK_BUILD_TESTS)
 	add_custom_target(dummy
 		COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${TESTS_JAVA_DIR} ${TESTS_JAVA_OUT}
 		COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/Dummy.java"
+		COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/PerfTest.java"
 	)
 
 	# Build library to inject
@@ -54,5 +55,13 @@ if(JNIHOOK_BUILD_TESTS)
 	add_library(test SHARED ${TESTS_SRC})
 	target_link_libraries(test PRIVATE jnihook)
 	set_target_properties(test PROPERTIES POSITION_INDEPENDENT_CODE True)
+
+	# Performance test library to inject
+	set(PERF_TEST_SRC "${TESTS_DIR}/perftest.cpp")
+	add_library(perftest SHARED ${PERF_TEST_SRC})
+	target_link_libraries(perftest PRIVATE jnihook)
+	set_target_properties(perftest PROPERTIES POSITION_INDEPENDENT_CODE True)
+
+	# Force building Java classes
 	add_dependencies(test dummy)
 endif()
