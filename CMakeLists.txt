@@ -39,6 +39,11 @@ target_link_directories(jnihook PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/serv
 target_link_libraries(jnihook PUBLIC jvm)
 
 if(JNIHOOK_BUILD_TESTS)
+	# Build Java classes
+	file(COPY "${PROJECT_SOURCE_DIR}/tests/dummy" DESTINATION .)
+	execute_process(COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/Dummy.java")
+
+	# Build library to inject
 	set(TESTS_DIR "${PROJECT_SOURCE_DIR}/tests")
 	set(TESTS_SRC "${TESTS_DIR}/test.cpp")
 	add_library(test SHARED ${TESTS_SRC})
