@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.21)
+cmake_minimum_required(VERSION 3.26)
 
 project(jnihook LANGUAGES C CXX)
 
@@ -39,14 +39,20 @@ target_link_directories(jnihook PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/serv
 target_link_libraries(jnihook PUBLIC jvm)
 
 if(JNIHOOK_BUILD_TESTS)
+	set(TESTS_DIR "${PROJECT_SOURCE_DIR}/tests")
+
 	# Build Java classes
-	file(COPY "${PROJECT_SOURCE_DIR}/tests/dummy" DESTINATION .)
-	execute_process(COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/Dummy.java")
+	set(TESTS_JAVA_OUT "${PROJECT_BINARY_DIR}/dummy")
+	set(TESTS_JAVA_DIR "${TESTS_DIR}/dummy")
+	add_custom_target(dummy
+		COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different ${TESTS_JAVA_DIR} ${TESTS_JAVA_OUT}
+		COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/Dummy.java"
+	)
 
 	# Build library to inject
-	set(TESTS_DIR "${PROJECT_SOURCE_DIR}/tests")
 	set(TESTS_SRC "${TESTS_DIR}/test.cpp")
 	add_library(test SHARED ${TESTS_SRC})
 	target_link_libraries(test PRIVATE jnihook)
 	set_target_properties(test PROPERTIES POSITION_INDEPENDENT_CODE True)
+	add_dependencies(test dummy)
 endif()
