@@ -1,11 +1,21 @@
 cmake_minimum_required(VERSION 3.21)
 
+include(ExternalProject)
+
 project(jnihook LANGUAGES C CXX)
 
 set (CMAKE_CXX_STANDARD 23) # Only necessary for <jnihook.hpp>. If you will use <jnihook.h> only, C++ 11 is fine.
 set(JAVA_HOME $ENV{JAVA_HOME} CACHE STRING "Set JAVA_HOME for dependency lookup")
 option(JNIHOOK_BUILD_TESTS "Enable building of tests" OFF)
 
+# external dependencies
+set(EXTERNAL_DEPENDENCIES_DIR "${PROJECT_SOURCE_DIR}/external")
+set(JNIF_DIR "${EXTERNAL_DEPENDENCIES_DIR}/jnif")
+set(JNIF_INC "${JNIF_DIR}/include")
+set(JNIF_IMPORT_DIR "${PROJECT_BINARY_DIR}/external/jnif-lib-prefix/src/jnif-lib-build")
+
+add_subdirectory(${JNIF_DIR})
+# jnihook
 set(JNIHOOK_DIR "${PROJECT_SOURCE_DIR}/src")
 set(JNIHOOK_INC "${PROJECT_SOURCE_DIR}/include")
 file(GLOB_RECURSE JNIHOOK_SRC "${JNIHOOK_DIR}/*.cpp")
@@ -23,7 +33,7 @@ set_target_properties(jnihook PROPERTIES POSITION_INDEPENDENT_CODE True)
 # TODO: Add other architectures for OpenJDK8 lookup path
 #       since it uses a non-standard path across platforms ($JAVA_HOME/jre/lib/<ARCH>/server)
 target_link_directories(jnihook PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/server" "${JAVA_HOME}/jre/lib/amd64/server/")
-target_link_libraries(jnihook PUBLIC jvm)
+target_link_libraries(jnihook PUBLIC jvm jnif)
 
 if(JNIHOOK_BUILD_TESTS)
 	# Build Java classes
