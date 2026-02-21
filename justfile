@@ -1,6 +1,9 @@
 JAVA_HOME := `java -XshowSettings:properties -version 2>&1 | awk -F '= ' '/java.home/ {print $2}'`
 NTHREADS := `nproc`
 
+test-dev: build-dev
+    cd build && java dummy.Dummy "`pwd`/libtest.so"
+
 build-dev:
     mkdir -p build
     cd build && \
