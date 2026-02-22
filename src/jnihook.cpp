@@ -243,72 +243,72 @@ JNIHook_Init(JavaVM *jvm)
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
-//         jclass clazz;
-//         std::string clazz_name;
-//         hook_info_t hook_info;
-//         jobject class_loader;
-//         JNIEnv *env;
+        jclass clazz;
+        std::string clazz_name;
+        hook_info_t hook_info;
+        jobject class_loader;
+        JNIEnv *env;
 
-//         if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
-//                 return JNIHOOK_ERR_GET_JNI;
-//         }
+        if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
+                return JNIHOOK_ERR_GET_JNI;
+        }
 
-//         if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
-//                 return JNIHOOK_ERR_JVMTI_OPERATION;
-//         }
+        if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
+                return JNIHOOK_ERR_JVMTI_OPERATION;
+        }
 
-//         clazz_name = get_class_name(env, clazz);
-//         if (clazz_name.length() == 0) {
-//                 return JNIHOOK_ERR_JNI_OPERATION;
-//         }
+        clazz_name = get_class_name(env, clazz);
+        if (clazz_name.length() == 0) {
+                return JNIHOOK_ERR_JNI_OPERATION;
+        }
 
-//         auto method_info = get_method_info(g_jnihook->jvmti, method);
-//         if (!method_info) {
-//                 return JNIHOOK_ERR_JVMTI_OPERATION;
-//         }
+        auto method_info = get_method_info(g_jnihook->jvmti, method);
+        if (!method_info) {
+                return JNIHOOK_ERR_JVMTI_OPERATION;
+        }
 
-//         hook_info.method_info = *method_info;
-//         hook_info.native_hook_method = native_hook_method;
+        hook_info.method_info = *method_info;
+        hook_info.native_hook_method = native_hook_method;
 
-//         // Force caching of the class being hooked
-//         if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-//                 if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
-//                         return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
-//                 }
+        // Force caching of the class being hooked
+        if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+                if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+                        return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+                }
 
-//                 // Temporarily register hook in g_hooks so that `ClassFileLoadHook` can see it
-//                 // Leaving it there could be a problem if this hook fails, it will still patch
-//                 // the class when JNIHook_Attach is called again for that same class, but won't
-//                 // register the native method, causing `java.lang.UnsatisfiedLinkError`.
-//                 g_hooks[clazz_name].push_back(hook_info);
-//                 auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
-//                 g_hooks[clazz_name].pop_back();
+                // Temporarily register hook in g_hooks so that `ClassFileLoadHook` can see it
+                // Leaving it there could be a problem if this hook fails, it will still patch
+                // the class when JNIHook_Attach is called again for that same class, but won't
+                // register the native method, causing `java.lang.UnsatisfiedLinkError`.
+                g_hooks[clazz_name].push_back(hook_info);
+                auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
+                g_hooks[clazz_name].pop_back();
 
-//                 // NOTE: We disable the ClassFileLoadHook here because it breaks
-//                 //       any `env->DefineClass()` calls. Also, it's not necessary
-//                 //       to keep it active at all times, we just have to use it for caching
-//                 //       uncached hooked classes.
-//                 // TODO: Investigate why it breaks it (possibly NullPointerException in
-//                 //       JNIHook_ClassFileLoadHook)
-//                 if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
-//                         return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
-//                 }
+                // NOTE: We disable the ClassFileLoadHook here because it breaks
+                //       any `env->DefineClass()` calls. Also, it's not necessary
+                //       to keep it active at all times, we just have to use it for caching
+                //       uncached hooked classes.
+                // TODO: Investigate why it breaks it (possibly NullPointerException in
+                //       JNIHook_ClassFileLoadHook)
+                if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+                        return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+                }
 
-//                 if (result != JVMTI_ERROR_NONE)
-//                         return JNIHOOK_ERR_CLASS_FILE_CACHE;
+                if (result != JVMTI_ERROR_NONE)
+                        return JNIHOOK_ERR_CLASS_FILE_CACHE;
 
-//                 if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-//                         return JNIHOOK_ERR_CLASS_FILE_CACHE;
-//                 }
-//         }
+                if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+                        return JNIHOOK_ERR_CLASS_FILE_CACHE;
+                }
+        }
 
-//         // Make copy of the class prior to hooking it
-//         // (allows calling the original functions)
-//         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-//                 std::string class_copy_name = clazz_name + "_" + GenerateUuid();
-//                 std::string class_shortname = class_copy_name.substr(class_copy_name.find_last_of('/') + 1);
-//                 std::string class_copy_source_name = class_shortname + ".java";
-//                 jclass class_copy;
+        // Make copy of the class prior to hooking it
+        // (allows calling the original functions)
+        if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
+                std::string new_class_name = clazz_name + "_" + GenerateUuid();
+                ClassFile new_cf(new_class_name.c_str(), clazz_name.c_str());
+                // std::string class_copy_source_name = class_shortname + ".java";
+                jclass class_copy;
 //                 auto cf = *g_class_file_cache[clazz_name];
 
 //                 // Patch source file name (Java will refuse to define the class otherwise)
@@ -443,102 +443,101 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 //                         }
 //                 }
 
-//                 auto class_data = cf.bytes();
+                auto class_data = new_cf.toBytes();
 
-//                 if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
-//                         return JNIHOOK_ERR_JVMTI_OPERATION;
+                if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
+                        return JNIHOOK_ERR_JVMTI_OPERATION;
 
-//                 class_copy = env->DefineClass(NULL, class_loader,
-//                                               reinterpret_cast<const jbyte *>(class_data.data()),
-//                                               class_data.size());
+                class_copy = env->DefineClass(NULL, class_loader,
+                                              reinterpret_cast<const jbyte *>(class_data.data()),
+                                              class_data.size());
 
-//                 if (!class_copy)
-//                         return JNIHOOK_ERR_JNI_OPERATION;
+                if (!class_copy)
+                        return JNIHOOK_ERR_JNI_OPERATION;
 
-//                 g_original_classes[clazz_name] = class_copy;
-//         }
+                g_original_classes[clazz_name] = class_copy;
+        }
 
-//         // Verify that everything was cached correctly
-//         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-//                 return JNIHOOK_ERR_CLASS_FILE_CACHE;
-//         }
+        // Verify that everything was cached correctly
+        if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
+                return JNIHOOK_ERR_CLASS_FILE_CACHE;
+        }
 
-//         // Get original method before applying hooks, because this is fallible
-//         if (original_method) {
-//                 jclass orig_class = g_original_classes[clazz_name];
-//                 jmethodID orig;
+        // Get original method before applying hooks, because this is fallible
+        if (original_method) {
+                jclass orig_class = g_original_classes[clazz_name];
+                jmethodID orig;
 
-//                 if ((method_info->access_flags & ACC_STATIC) == ACC_STATIC) {
-//                         orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
-//                                                       method_info->signature.c_str());
-//                 } else {
-//                         orig = env->GetMethodID(orig_class, method_info->name.c_str(),
-//                                                 method_info->signature.c_str());
-//                 }
+                if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
+                        orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
+                                                      method_info->signature.c_str());
+                } else {
+                        orig = env->GetMethodID(orig_class, method_info->name.c_str(),
+                                                method_info->signature.c_str());
+                }
 
-//                 if (!orig || env->ExceptionOccurred()) {
-//                         env->ExceptionClear();
-//                         return JNIHOOK_ERR_JAVA_EXCEPTION;
-//                 }
+                if (!orig || env->ExceptionOccurred()) {
+                        env->ExceptionClear();
+                        return JNIHOOK_ERR_JAVA_EXCEPTION;
+                }
 
-//                 *original_method = orig;
-//         }
+                *original_method = orig;
+        }
 
-//         // Suspend other threads while the hook is being set up
-//         jthread curthread;
-//         jthread *threads;
-//         jint thread_count;
+        // Suspend other threads while the hook is being set up
+        jthread curthread;
+        jthread *threads;
+        jint thread_count;
 
-//         env->PushLocalFrame(16);
+        env->PushLocalFrame(16);
         
-//         if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
-//                 return JNIHOOK_ERR_JVMTI_OPERATION;
+        if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
+                return JNIHOOK_ERR_JVMTI_OPERATION;
 
-//         if (g_jnihook->jvmti->GetAllThreads(&thread_count, &threads) != JVMTI_ERROR_NONE)
-//                 return JNIHOOK_ERR_JVMTI_OPERATION;
+        if (g_jnihook->jvmti->GetAllThreads(&thread_count, &threads) != JVMTI_ERROR_NONE)
+                return JNIHOOK_ERR_JVMTI_OPERATION;
 
-//         // TODO: Only suspend/resume threads that are actually active
-//         for (jint i = 0; i < thread_count; ++i) {
-//                 if (env->IsSameObject(threads[i], curthread))
-//                         continue;
+        // TODO: Only suspend/resume threads that are actually active
+        for (jint i = 0; i < thread_count; ++i) {
+                if (env->IsSameObject(threads[i], curthread))
+                        continue;
 
-//                 g_jnihook->jvmti->SuspendThread(threads[i]);
-//         }
+                g_jnihook->jvmti->SuspendThread(threads[i]);
+        }
 
-//         // Apply current hooks
-        jnihook_result_t ret;
-//         g_hooks[clazz_name].push_back(hook_info);
-//         if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
-//                 g_hooks[clazz_name].pop_back();
-//                 goto RESUME_THREADS;
-//         }
+        // Apply current hooks
+        jnihook_result_t ret = JNIHOOK_ERR_JNI_OPERATION;
+        g_hooks[clazz_name].push_back(hook_info);
+        if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
+                g_hooks[clazz_name].pop_back();
+                goto RESUME_THREADS;
+        }
 
-//         // Register native method for JVM lookup
-//         JNINativeMethod native_method;
-//         native_method.name = const_cast<char *>(method_info->name.c_str());
-//         native_method.signature = const_cast<char *>(method_info->signature.c_str());
-//         native_method.fnPtr = native_hook_method;
+        // Register native method for JVM lookup
+        JNINativeMethod native_method;
+        native_method.name = const_cast<char *>(method_info->name.c_str());
+        native_method.signature = const_cast<char *>(method_info->signature.c_str());
+        native_method.fnPtr = native_hook_method;
 
-//         if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
-//                 g_hooks[clazz_name].pop_back();
-//                 ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
-//                 ret = JNIHOOK_ERR_JNI_OPERATION;
-//                 goto RESUME_THREADS;
-//         }
+        if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
+                g_hooks[clazz_name].pop_back();
+                ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
+                goto RESUME_THREADS;
+        }
 
-//         ret = JNIHOOK_OK;
+        ret = JNIHOOK_OK;
 
-// RESUME_THREADS:
-//         // Resume other threads, hook already placed succesfully
-//         for (jint i = 0; i < thread_count; ++i) {
-//                 if (env->IsSameObject(threads[i], curthread))
-//                         continue;
+RESUME_THREADS:
+        // Resume other threads, hook already placed succesfully
+        for (jint i = 0; i < thread_count; ++i) {
+                if (env->IsSameObject(threads[i], curthread))
+                        continue;
 
-//                 g_jnihook->jvmti->ResumeThread(threads[i]);
-//         }
+                g_jnihook->jvmti->ResumeThread(threads[i]);
+        }
 
-//         g_jnihook->jvmti->Deallocate(reinterpret_cast<unsigned char *>(threads));
-//         env->PopLocalFrame(NULL);
+        g_jnihook->jvmti->Deallocate(reinterpret_cast<unsigned char *>(threads));
+        env->PopLocalFrame(NULL);
 
         return ret;
 }
