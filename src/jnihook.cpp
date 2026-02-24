@@ -197,14 +197,11 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         // Redefine class with modified ClassFile
         auto cf_bytes = cf->toBytes();
 
-        std::cout << "REAPPLYING CLASS: " << *cf << std::endl;
-
         class_definition.klass = clazz;
         class_definition.class_byte_count = cf_bytes.size();
         class_definition.class_bytes = cf_bytes.data();
         err = g_jnihook->jvmti->RedefineClasses(1, &class_definition);
         if (err != JVMTI_ERROR_NONE) {
-                std::cout << "ERR: " << err << std::endl;
                 return JNIHOOK_ERR_JVMTI_OPERATION;
         }
 
@@ -316,196 +313,16 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 auto &cf = g_class_file_cache[clazz_name];
                 auto new_cf = cf->clone(); // TODO: Consider extending the original class
 
-                // // ============== ANOTHER ATTEMPT ===================
-                // // ClassFile new_cf(new_class_name.c_str(), clazz_name.c_str()); // With Extends
-                // // Copy the original method here
-                // // TODO: Get EXACT method, not just by name
-                // auto method = cf->getMethod(method_info->name.c_str());
-                // auto nameIndex = new_cf.addUtf8(method->getName());
-                // auto descIndex = new_cf.addUtf8(method->getDesc());
-                // auto &method_copy = new_cf.addMethod(nameIndex, descIndex, method->accessFlags);
-
-                // // TODO: Consider the following:
-                // // for (auto &attr : method->attrs.attrs) {
-                // //         method_copy.attrs.add(attr);
-                // // }
-                // auto code_name_index = new_cf.addUtf8("Code");
-                // CodeAttr code = CodeAttr(code_name_index, &new_cf);
-                // method_copy.attrs.add(&code);
-
-                // std::cout << "NO EXCEPTIONS HERE YET" << std::endl;
-                // auto &inst_list = method->instList();
-                // auto &new_inst_list = code.instList;
-                // std::cout << "INSTRUCTION COUNT: " << method->instList().size() << std::endl;
-                // try {
-                //         for (auto it = inst_list.begin(); it != inst_list.end(); ++it) {
-                //                 auto inst = *it;
-                //                 std::cout << "NEW INSTRUCTION: " << inst->opcode << " -- " << inst->kind << std::endl;
-                //                 new_inst_list.copy(inst);
-                //         }
-                // } catch (Exception &ex) {
-                //         std::cout << "SOMETHING BAD HAPEPNED: " << ex.message << std::endl;
-                //         throw ex;
-                // }
-
-                // std::cout << "GENERATED INSTRUCTIONS" << std::endl;
-                // for (auto it = new_inst_list.begin(); it != new_inst_list.end(); ++it) {
-                //         auto inst = *it;
-                //         std::cout << "NEW INSTRUCTION: " << inst->opcode << " " << inst->kind << std::endl;
-                // }
-
-                // std::cout << "NO EXCEPTIONS HERE YET" << std::endl;
-                // // =====================================================
-
-//                 // Patch source file name (Java will refuse to define the class otherwise)
-//                 for (auto &attr : cf.get_attributes()) {
-//                         auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-//                                 cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
-//                         );
-//                         auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
-//                         if (attr_name != "SourceFile")
-//                                 continue;
-
-//                         u2 attr_index_be = ((attr.attribute_name_index >> 8) & 0xff) |
-//                                            ((attr.attribute_name_index & 0xff) << 8);
-//                         u2 source = *reinterpret_cast<u2 *>(attr.info.data());
-
-//                         // Some classes have 'SourceFile' attribute be equal to 'SourceFile',
-//                         // and not 'ClassName.java'. For those, we won't set a custom source.
-//                         if (source == attr_index_be)
-//                                 break;
-
-//                         // Overwrite constant pool item
-//                         CONSTANT_Utf8_info ci;
-//                         cp_info sourcefile_cpi;
-//                         ci.tag = CONSTANT_Utf8;
-//                         ci.length = static_cast<u2>(class_copy_source_name.size());
-
-//                         sourcefile_cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-//                         memcpy(sourcefile_cpi.bytes.data(), &ci, sizeof(ci));
-//                         memcpy(&sourcefile_cpi.bytes.data()[sizeof(ci)], class_copy_source_name.c_str(), ci.length);
-
-//                         cf.set_constant_pool_item_be(source, sourcefile_cpi);
-//                 }
-
-//                 // Patch class name (Java will refuse to define the class otherwise)
-//                 for (auto &cpi : cf.get_constant_pool()) {
-//                         if (cpi.bytes[0] != CONSTANT_Class)
-//                                 continue;
-
-//                         auto class_ci = reinterpret_cast<CONSTANT_Class_info *>(
-//                                 cpi.bytes.data()
-//                         );
-
-//                         auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-//                                 cf.get_constant_pool_item(class_ci->name_index).bytes.data()
-//                         );
-
-//                         auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
-
-//                         if (name == clazz_name) {
-//                                 // Overwrite constant pool item
-//                                 CONSTANT_Utf8_info ci;
-//                                 cp_info cpi;
-
-//                                 ci.tag = CONSTANT_Utf8;
-//                                 ci.length = static_cast<u2>(class_copy_name.size());
-
-//                                 cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-//                                 memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-//                                 memcpy(&cpi.bytes.data()[sizeof(ci)], class_copy_name.c_str(), ci.length);
-
-//                                 cf.set_constant_pool_item(class_ci->name_index, cpi);
-//                                 break; // TODO: Assure that the ClassName can only happen once per ClassFile!
-//                         }
-//                 }
-
-//                 // Patch NameAndType things that instance the current class
-//                 // NOTE: This is an attempt to fix the following exception when
-//                 //       trying to get the method ID after defining the class:
-//                 //
-//                 // Type 'OrigClass' (current frame, stack[0]) is not assignable to 'OrigClass_<UUID>'
-//                 auto constant_pool = cf.get_constant_pool();
-//                 for (auto &item : constant_pool) {
-//                         if (item.bytes[0] != CONSTANT_NameAndType)
-//                                 continue;
-
-//                         auto nt_ci = reinterpret_cast<CONSTANT_NameAndType_info *>(item.bytes.data());
-//                         auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-//                                 cf.get_constant_pool_item(nt_ci->descriptor_index).bytes.data()
-//                         );
-//                         auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-
-//                         std::string clazz_desc = std::string("L") + clazz_name + ";";
-//                         std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
-//                         if (auto index = descriptor.find(clazz_desc); index != descriptor.npos) {
-//                                 // Overwrite constant pool item
-//                                 CONSTANT_Utf8_info ci;
-//                                 cp_info cpi;
-//                                 std::string new_descriptor = descriptor.replace(index, clazz_desc.size(), clazz_copy_desc);
-
-//                                 ci.tag = CONSTANT_Utf8;
-//                                 ci.length = static_cast<u2>(new_descriptor.size());
-
-//                                 cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-//                                 memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-//                                 memcpy(&cpi.bytes.data()[sizeof(ci)], new_descriptor.c_str(), ci.length);
-
-//                                 cf.set_constant_pool_item(nt_ci->descriptor_index, cpi);
-//                         }
-//                 }
-
-//                 // Patch method descriptors
-//                 // NOTE: Not every Type or return Type is referenced by a NameAndType
-//                 //       So we have to check the method descriptors as well
-//                 auto methods = cf.get_methods();
-//                 for (auto& method : methods)
-//                 {
-//                         auto descriptor_index = method.descriptor_index;
-
-//                         auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info*>(
-//                                 cf.get_constant_pool_item(descriptor_index).bytes.data()
-//                                 );
-
-//                         auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-
-//                         std::string clazz_desc = std::string("L") + clazz_name + ";";
-//                         std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
-
-//                         for (size_t index; (index = descriptor.find(clazz_desc)) != descriptor.npos;)
-//                         {
-//                                 CONSTANT_Utf8_info ci;
-//                                 cp_info cpi;
-//                                 std::string new_descriptor = descriptor.replace(index, clazz_desc.size(), clazz_copy_desc);
-
-//                                 ci.tag = CONSTANT_Utf8;
-//                                 ci.length = static_cast<u2>(new_descriptor.size());
-
-//                                 cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-//                                 memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-//                                 memcpy(&cpi.bytes.data()[sizeof(ci)], new_descriptor.c_str(), ci.length);
-
-//                                 cf.set_constant_pool_item(descriptor_index, cpi);
-//                         }
-//                 }
-
                 new_cf->rename(new_class_name.c_str());
 
-                std::cout << "GENERATED COPY CLASSFILE:" << std::endl;
                 std::vector<u1> class_data;
                 try {
-                        std::cout << *new_cf << std::endl;
-                        std::cout << "PRINT IFNISHED" << std::endl;
                         class_data = new_cf->toBytes();
-                        std::cout << "DUMP FINISHED" << std::endl;
                 } catch (const Exception &ex) {
-                        std::cout << "EXCEPTION!!!: " << ex.message << std::endl;
                         return JNIHOOK_ERR_JVMTI_OPERATION;
                 } catch (...) {
-                        std::cout << "UNKNOWN EXCEPTION THROWN!!!" << std::endl;
                         return JNIHOOK_ERR_JVMTI_OPERATION;
                 }
-                std::cout << "=========================" << std::endl;
 
                 if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
                         return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -514,10 +331,8 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                                               reinterpret_cast<const jbyte *>(class_data.data()),
                                               class_data.size());
 
-                std::cout << "ATTEMPTED TO DEFINE CLASS" << std::endl;
                 if (!class_copy)
                         return JNIHOOK_ERR_JNI_OPERATION;
-                std::cout << "DEFINE CLASS WAS GUCCI" << std::endl;
 
                 g_original_classes[clazz_name] = class_copy;
         }
@@ -555,7 +370,6 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 
         env->PushLocalFrame(16);
 
-        std::cout << "TRYNA DO THE THREAD THINGS" << std::endl;
         if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
                 return JNIHOOK_ERR_JVMTI_OPERATION;
 
@@ -570,13 +384,10 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 g_jnihook->jvmti->SuspendThread(threads[i]);
         }
 
-        std::cout << "THREAD THIGNS GUCCI" << std::endl;
         // Apply current hooks
-        std::cout << "TRYNA DO THE HOOK APPLICATION" << std::endl;
         jnihook_result_t ret = JNIHOOK_ERR_JNI_OPERATION;
         g_hooks[clazz_name].push_back(hook_info);
         if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
-                std::cout << "REAPPLY CLASS WAS NO GUCCI :(" << std::endl;
                 g_hooks[clazz_name].pop_back();
                 goto RESUME_THREADS;
         }
@@ -592,7 +403,6 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
                 goto RESUME_THREADS;
         }
-        std::cout << "EVERYTHING SUPER GUCCI" << std::endl;
 
         ret = JNIHOOK_OK;
 
