@@ -311,10 +311,24 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 std::string new_class_name = clazz_name + "_" + GenerateUuid();
                 jclass class_copy;
                 auto &cf = g_class_file_cache[clazz_name];
-                auto new_cf = cf->clone(); // TODO: Consider extending the original class
+                auto new_cf = cf->clone();
 
+                // Rename the copy class
                 new_cf->rename(new_class_name.c_str());
 
+                // Inherit the original class
+                // auto orig_class_index = new_cf->addClass(clazz_name.c_str());
+                // new_cf->superClassIndex = orig_class_index;
+
+                // Make all methods final (may help with CallNonvirtual)
+                for (auto &method : new_cf->methods) {
+                        if (method.isInit())
+                                continue;
+
+                        const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
+                }
+
+                std::cout << "NEW CLASS: " << *new_cf << std::endl;
                 std::vector<u1> class_data;
                 try {
                         class_data = new_cf->toBytes();
