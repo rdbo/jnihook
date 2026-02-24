@@ -20,14 +20,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <iostream>
 #include <jnihook.h>
 #include <unordered_map>
 #include <string>
 #include <vector>
-#include <cstdint>
 #include <cstring>
-#include "classfile.hpp"
+#include <jnif.hpp>
 #include "uuid.hpp"
+
+using namespace jnif;
 
 typedef struct jnihook_t {
         JavaVM   *jvm;
@@ -139,7 +141,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
 
         // Cache parsed ClassFile if it's not cached yet
         if (g_class_file_cache.find(class_name) == g_class_file_cache.end()) {
-                auto cf = ClassFile::load(class_data);
+                auto cf = ClassFile::parse((u1 *)class_data, class_data_len);
                 if (!cf)
                         return;
 
@@ -155,26 +157,16 @@ jnihook_result_t
 ReapplyClass(jclass clazz, std::string clazz_name)
 {
         jvmtiClassDefinition class_definition;
-
-        auto cf = *g_class_file_cache[clazz_name];
-
-        auto constant_pool = cf.get_constant_pool();
+        jvmtiError err;
+        auto cf = g_class_file_cache[clazz_name]->clone();
 
         // Patch class file
         // NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
         //       Method references are not included here
         //       If the source file has more than one class, they are compiled as separate ClassFiles
-        for (auto &method : cf.get_methods()) {
-                auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-                        cf.get_constant_pool_item(method.name_index).bytes.data()
-                );
-
-                auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-                        cf.get_constant_pool_item(method.descriptor_index).bytes.data()
-                );
-
-                auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
-                auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
+        for (auto &method : cf->methods) {
+                auto name = method.getName();
+                auto descriptor = method.getDesc();
 
                 // Check if the current method is a method that should be hooked
                 // TODO: Use hashmap for faster lookup
@@ -190,30 +182,28 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                         continue;
 
                 // Set method to native
-                method.access_flags |= ACC_NATIVE;
+                *(u2 *)&method.accessFlags |= Method::NATIVE;
 
                 // Remove "Code" attribute
-                for (size_t i = 0; i < method.attributes.size(); ++i) {
-                        auto attr = method.attributes[i];
-                        auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-                                cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
-                        );
-                        auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
-                        if (attr_name == "Code") {
-                                method.attributes.erase(method.attributes.begin() + i);
+                for (size_t i = 0; i < method.attrs.size(); ++i) {
+                        auto &attr = method.attrs[i];
+                        if (attr.kind == ATTR_CODE) {
+                                method.attrs.remove(i);
                                 break;
                         }
                 }
         }
 
         // Redefine class with modified ClassFile
-        auto cf_bytes = cf.bytes();
+        auto cf_bytes = cf->toBytes();
 
         class_definition.klass = clazz;
         class_definition.class_byte_count = cf_bytes.size();
         class_definition.class_bytes = cf_bytes.data();
-        if (g_jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
+        err = g_jnihook->jvmti->RedefineClasses(1, &class_definition);
+        if (err != JVMTI_ERROR_NONE) {
                 return JNIHOOK_ERR_JVMTI_OPERATION;
+        }
 
         return JNIHOOK_OK;
 }
@@ -318,145 +308,35 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         // Make copy of the class prior to hooking it
         // (allows calling the original functions)
         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-                std::string class_copy_name = clazz_name + "_" + GenerateUuid();
-                std::string class_shortname = class_copy_name.substr(class_copy_name.find_last_of('/') + 1);
-                std::string class_copy_source_name = class_shortname + ".java";
+                std::string new_class_name = clazz_name + "_" + GenerateUuid();
                 jclass class_copy;
-                auto cf = *g_class_file_cache[clazz_name];
+                auto &cf = g_class_file_cache[clazz_name];
+                auto new_cf = cf->clone();
 
-                // Patch source file name (Java will refuse to define the class otherwise)
-                for (auto &attr : cf.get_attributes()) {
-                        auto attr_name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-                                cf.get_constant_pool_item(attr.attribute_name_index).bytes.data()
-                        );
-                        auto attr_name = std::string(attr_name_ci->bytes, &attr_name_ci->bytes[attr_name_ci->length]);
-                        if (attr_name != "SourceFile")
+                // Rename the copy class
+                new_cf->rename(new_class_name.c_str());
+
+                // Inherit the original class
+                // auto orig_class_index = new_cf->addClass(clazz_name.c_str());
+                // new_cf->superClassIndex = orig_class_index;
+
+                // Make all methods final (may help with CallNonvirtual)
+                for (auto &method : new_cf->methods) {
+                        if (method.isInit())
                                 continue;
 
-                        u2 attr_index_be = ((attr.attribute_name_index >> 8) & 0xff) |
-                                           ((attr.attribute_name_index & 0xff) << 8);
-                        u2 source = *reinterpret_cast<u2 *>(attr.info.data());
-
-                        // Some classes have 'SourceFile' attribute be equal to 'SourceFile',
-                        // and not 'ClassName.java'. For those, we won't set a custom source.
-                        if (source == attr_index_be)
-                                break;
-
-                        // Overwrite constant pool item
-                        CONSTANT_Utf8_info ci;
-                        cp_info sourcefile_cpi;
-                        ci.tag = CONSTANT_Utf8;
-                        ci.length = static_cast<u2>(class_copy_source_name.size());
-
-                        sourcefile_cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-                        memcpy(sourcefile_cpi.bytes.data(), &ci, sizeof(ci));
-                        memcpy(&sourcefile_cpi.bytes.data()[sizeof(ci)], class_copy_source_name.c_str(), ci.length);
-
-                        cf.set_constant_pool_item_be(source, sourcefile_cpi);
+                        const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
                 }
 
-                // Patch class name (Java will refuse to define the class otherwise)
-                for (auto &cpi : cf.get_constant_pool()) {
-                        if (cpi.bytes[0] != CONSTANT_Class)
-                                continue;
-
-                        auto class_ci = reinterpret_cast<CONSTANT_Class_info *>(
-                                cpi.bytes.data()
-                        );
-
-                        auto name_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-                                cf.get_constant_pool_item(class_ci->name_index).bytes.data()
-                        );
-
-                        auto name = std::string(name_ci->bytes, &name_ci->bytes[name_ci->length]);
-
-                        if (name == clazz_name) {
-                                // Overwrite constant pool item
-                                CONSTANT_Utf8_info ci;
-                                cp_info cpi;
-
-                                ci.tag = CONSTANT_Utf8;
-                                ci.length = static_cast<u2>(class_copy_name.size());
-
-                                cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-                                memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-                                memcpy(&cpi.bytes.data()[sizeof(ci)], class_copy_name.c_str(), ci.length);
-
-                                cf.set_constant_pool_item(class_ci->name_index, cpi);
-                                break; // TODO: Assure that the ClassName can only happen once per ClassFile!
-                        }
+                std::cout << "NEW CLASS: " << *new_cf << std::endl;
+                std::vector<u1> class_data;
+                try {
+                        class_data = new_cf->toBytes();
+                } catch (const Exception &ex) {
+                        return JNIHOOK_ERR_JVMTI_OPERATION;
+                } catch (...) {
+                        return JNIHOOK_ERR_JVMTI_OPERATION;
                 }
-
-                // Patch NameAndType things that instance the current class
-                // NOTE: This is an attempt to fix the following exception when
-                //       trying to get the method ID after defining the class:
-                //
-                // Type 'OrigClass' (current frame, stack[0]) is not assignable to 'OrigClass_<UUID>'
-                auto constant_pool = cf.get_constant_pool();
-                for (auto &item : constant_pool) {
-                        if (item.bytes[0] != CONSTANT_NameAndType)
-                                continue;
-
-                        auto nt_ci = reinterpret_cast<CONSTANT_NameAndType_info *>(item.bytes.data());
-                        auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info *>(
-                                cf.get_constant_pool_item(nt_ci->descriptor_index).bytes.data()
-                        );
-                        auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-
-                        std::string clazz_desc = std::string("L") + clazz_name + ";";
-                        std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
-                        if (auto index = descriptor.find(clazz_desc); index != descriptor.npos) {
-                                // Overwrite constant pool item
-                                CONSTANT_Utf8_info ci;
-                                cp_info cpi;
-                                std::string new_descriptor = descriptor.replace(index, clazz_desc.size(), clazz_copy_desc);
-
-                                ci.tag = CONSTANT_Utf8;
-                                ci.length = static_cast<u2>(new_descriptor.size());
-
-                                cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-                                memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-                                memcpy(&cpi.bytes.data()[sizeof(ci)], new_descriptor.c_str(), ci.length);
-
-                                cf.set_constant_pool_item(nt_ci->descriptor_index, cpi);
-                        }
-                }
-
-                // Patch method descriptors
-                // NOTE: Not every Type or return Type is referenced by a NameAndType
-                //       So we have to check the method descriptors as well
-                auto methods = cf.get_methods();
-                for (auto& method : methods)
-                {
-                        auto descriptor_index = method.descriptor_index;
-
-                        auto descriptor_ci = reinterpret_cast<CONSTANT_Utf8_info*>(
-                                cf.get_constant_pool_item(descriptor_index).bytes.data()
-                                );
-
-                        auto descriptor = std::string(descriptor_ci->bytes, &descriptor_ci->bytes[descriptor_ci->length]);
-
-                        std::string clazz_desc = std::string("L") + clazz_name + ";";
-                        std::string clazz_copy_desc = std::string("L") + class_copy_name + ";";
-
-                        for (size_t index; (index = descriptor.find(clazz_desc)) != descriptor.npos;)
-                        {
-                                CONSTANT_Utf8_info ci;
-                                cp_info cpi;
-                                std::string new_descriptor = descriptor.replace(index, clazz_desc.size(), clazz_copy_desc);
-
-                                ci.tag = CONSTANT_Utf8;
-                                ci.length = static_cast<u2>(new_descriptor.size());
-
-                                cpi.bytes = std::vector<uint8_t>(sizeof(ci) + ci.length);
-                                memcpy(cpi.bytes.data(), &ci, sizeof(ci));
-                                memcpy(&cpi.bytes.data()[sizeof(ci)], new_descriptor.c_str(), ci.length);
-
-                                cf.set_constant_pool_item(descriptor_index, cpi);
-                        }
-                }
-
-                auto class_data = cf.bytes();
 
                 if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
                         return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -481,7 +361,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 jclass orig_class = g_original_classes[clazz_name];
                 jmethodID orig;
 
-                if ((method_info->access_flags & ACC_STATIC) == ACC_STATIC) {
+                if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
                         orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
                                                       method_info->signature.c_str());
                 } else {
@@ -503,7 +383,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         jint thread_count;
 
         env->PushLocalFrame(16);
-        
+
         if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
                 return JNIHOOK_ERR_JVMTI_OPERATION;
 
@@ -519,7 +399,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         }
 
         // Apply current hooks
-        jnihook_result_t ret;
+        jnihook_result_t ret = JNIHOOK_ERR_JNI_OPERATION;
         g_hooks[clazz_name].push_back(hook_info);
         if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
                 g_hooks[clazz_name].pop_back();
@@ -535,7 +415,6 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
                 g_hooks[clazz_name].pop_back();
                 ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
-                ret = JNIHOOK_ERR_JNI_OPERATION;
                 goto RESUME_THREADS;
         }
 

@@ -1,0 +1,3 @@
+[submodule "external/jnif"]
+	path = external/jnif
+	url = https://github.com/rdbo/jnif
