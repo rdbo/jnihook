@@ -20,6 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+#include <iostream>
 #include <jnihook.h>
 #include <unordered_map>
 #include <string>
@@ -156,7 +157,7 @@ jnihook_result_t
 ReapplyClass(jclass clazz, std::string clazz_name)
 {
         jvmtiClassDefinition class_definition;
-
+        jvmtiError err;
         auto cf = g_class_file_cache[clazz_name]->clone();
 
         // Patch class file
@@ -196,11 +197,16 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         // Redefine class with modified ClassFile
         auto cf_bytes = cf->toBytes();
 
+        std::cout << "REAPPLYING CLASS: " << *cf << std::endl;
+
         class_definition.klass = clazz;
         class_definition.class_byte_count = cf_bytes.size();
         class_definition.class_bytes = cf_bytes.data();
-        if (g_jnihook->jvmti->RedefineClasses(1, &class_definition) != JVMTI_ERROR_NONE)
+        err = g_jnihook->jvmti->RedefineClasses(1, &class_definition);
+        if (err != JVMTI_ERROR_NONE) {
+                std::cout << "ERR: " << err << std::endl;
                 return JNIHOOK_ERR_JVMTI_OPERATION;
+        }
 
         return JNIHOOK_OK;
 }
@@ -306,10 +312,50 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         // (allows calling the original functions)
         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
                 std::string new_class_name = clazz_name + "_" + GenerateUuid();
-                ClassFile new_cf(new_class_name.c_str(), clazz_name.c_str());
-                // std::string class_copy_source_name = class_shortname + ".java";
                 jclass class_copy;
-//                 auto cf = *g_class_file_cache[clazz_name];
+                auto &cf = g_class_file_cache[clazz_name];
+                auto new_cf = cf->clone(); // TODO: Consider extending the original class
+
+                // // ============== ANOTHER ATTEMPT ===================
+                // // ClassFile new_cf(new_class_name.c_str(), clazz_name.c_str()); // With Extends
+                // // Copy the original method here
+                // // TODO: Get EXACT method, not just by name
+                // auto method = cf->getMethod(method_info->name.c_str());
+                // auto nameIndex = new_cf.addUtf8(method->getName());
+                // auto descIndex = new_cf.addUtf8(method->getDesc());
+                // auto &method_copy = new_cf.addMethod(nameIndex, descIndex, method->accessFlags);
+
+                // // TODO: Consider the following:
+                // // for (auto &attr : method->attrs.attrs) {
+                // //         method_copy.attrs.add(attr);
+                // // }
+                // auto code_name_index = new_cf.addUtf8("Code");
+                // CodeAttr code = CodeAttr(code_name_index, &new_cf);
+                // method_copy.attrs.add(&code);
+
+                // std::cout << "NO EXCEPTIONS HERE YET" << std::endl;
+                // auto &inst_list = method->instList();
+                // auto &new_inst_list = code.instList;
+                // std::cout << "INSTRUCTION COUNT: " << method->instList().size() << std::endl;
+                // try {
+                //         for (auto it = inst_list.begin(); it != inst_list.end(); ++it) {
+                //                 auto inst = *it;
+                //                 std::cout << "NEW INSTRUCTION: " << inst->opcode << " -- " << inst->kind << std::endl;
+                //                 new_inst_list.copy(inst);
+                //         }
+                // } catch (Exception &ex) {
+                //         std::cout << "SOMETHING BAD HAPEPNED: " << ex.message << std::endl;
+                //         throw ex;
+                // }
+
+                // std::cout << "GENERATED INSTRUCTIONS" << std::endl;
+                // for (auto it = new_inst_list.begin(); it != new_inst_list.end(); ++it) {
+                //         auto inst = *it;
+                //         std::cout << "NEW INSTRUCTION: " << inst->opcode << " " << inst->kind << std::endl;
+                // }
+
+                // std::cout << "NO EXCEPTIONS HERE YET" << std::endl;
+                // // =====================================================
 
 //                 // Patch source file name (Java will refuse to define the class otherwise)
 //                 for (auto &attr : cf.get_attributes()) {
@@ -443,7 +489,23 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 //                         }
 //                 }
 
-                auto class_data = new_cf.toBytes();
+                new_cf->rename(new_class_name.c_str());
+
+                std::cout << "GENERATED COPY CLASSFILE:" << std::endl;
+                std::vector<u1> class_data;
+                try {
+                        std::cout << *new_cf << std::endl;
+                        std::cout << "PRINT IFNISHED" << std::endl;
+                        class_data = new_cf->toBytes();
+                        std::cout << "DUMP FINISHED" << std::endl;
+                } catch (const Exception &ex) {
+                        std::cout << "EXCEPTION!!!: " << ex.message << std::endl;
+                        return JNIHOOK_ERR_JVMTI_OPERATION;
+                } catch (...) {
+                        std::cout << "UNKNOWN EXCEPTION THROWN!!!" << std::endl;
+                        return JNIHOOK_ERR_JVMTI_OPERATION;
+                }
+                std::cout << "=========================" << std::endl;
 
                 if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
                         return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -452,8 +514,10 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                                               reinterpret_cast<const jbyte *>(class_data.data()),
                                               class_data.size());
 
+                std::cout << "ATTEMPTED TO DEFINE CLASS" << std::endl;
                 if (!class_copy)
                         return JNIHOOK_ERR_JNI_OPERATION;
+                std::cout << "DEFINE CLASS WAS GUCCI" << std::endl;
 
                 g_original_classes[clazz_name] = class_copy;
         }
@@ -490,7 +554,8 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         jint thread_count;
 
         env->PushLocalFrame(16);
-        
+
+        std::cout << "TRYNA DO THE THREAD THINGS" << std::endl;
         if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
                 return JNIHOOK_ERR_JVMTI_OPERATION;
 
@@ -505,10 +570,13 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 g_jnihook->jvmti->SuspendThread(threads[i]);
         }
 
+        std::cout << "THREAD THIGNS GUCCI" << std::endl;
         // Apply current hooks
+        std::cout << "TRYNA DO THE HOOK APPLICATION" << std::endl;
         jnihook_result_t ret = JNIHOOK_ERR_JNI_OPERATION;
         g_hooks[clazz_name].push_back(hook_info);
         if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
+                std::cout << "REAPPLY CLASS WAS NO GUCCI :(" << std::endl;
                 g_hooks[clazz_name].pop_back();
                 goto RESUME_THREADS;
         }
@@ -524,6 +592,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
                 goto RESUME_THREADS;
         }
+        std::cout << "EVERYTHING SUPER GUCCI" << std::endl;
 
         ret = JNIHOOK_OK;
 
