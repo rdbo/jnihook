@@ -328,7 +328,6 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                         const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
                 }
 
-                std::cout << "NEW CLASS: " << *new_cf << std::endl;
                 std::vector<u1> class_data;
                 try {
                         class_data = new_cf->toBytes();
