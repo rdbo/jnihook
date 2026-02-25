@@ -11,10 +11,10 @@ build-dev:
         make -j {{NTHREADS}}
 
 build-release:
-    mkdir -p build
-    cd build && \
+    mkdir -p build-release
+    cd build-release && \
         JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Release -DJNIHOOK_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF && \
         make -j {{NTHREADS}}
 
 clean:
-    rm -rf build
+    rm -rf build*
