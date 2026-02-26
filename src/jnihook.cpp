@@ -22,12 +22,18 @@
 
 #include <iostream>
 #include <jnihook.h>
+#include <sstream>
 #include <unordered_map>
 #include <string>
 #include <vector>
 #include <cstring>
 #include <jnif.hpp>
 #include "uuid.hpp"
+#ifndef NDEBUG
+        #define LOG(...) {printf("[JNIHOOK] " __VA_ARGS__);fflush(stdout);}
+#else
+        #define LOG(...)
+#endif
 
 using namespace jnif;
 
@@ -202,6 +208,12 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         class_definition.class_bytes = cf_bytes.data();
         err = g_jnihook->jvmti->RedefineClasses(1, &class_definition);
         if (err != JVMTI_ERROR_NONE) {
+                std::stringstream ss;
+                ss << *cf;
+                LOG("ERR: JVMTI error in ReapplyClass: %d\n", err);
+                LOG("===== CLASS REAPPLIED =====\n");
+                LOG("%s\n", ss.str().c_str());
+                LOG("===========================\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
         }
 
@@ -216,10 +228,12 @@ JNIHook_Init(JavaVM *jvm)
         jvmtiEventCallbacks callbacks = {};
 
         if (jvm->GetEnv(reinterpret_cast<void **>(&jvmti), JVMTI_VERSION_1_2) != JNI_OK) {
+                LOG("ERR: Failed to get JVMTI");
                 return JNIHOOK_ERR_GET_JVMTI;
         }
 
         if (jvmti->GetPotentialCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
+                LOG("ERR: Failed to get potential capabilities");
                 return JNIHOOK_ERR_ADD_JVMTI_CAPS;
         }
 
@@ -230,11 +244,13 @@ JNIHook_Init(JavaVM *jvm)
         capabilities.can_suspend = 1;
 
         if (jvmti->AddCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
+                LOG("ERR: Failed to add capabilities");
                 return JNIHOOK_ERR_ADD_JVMTI_CAPS;
         }
 
         callbacks.ClassFileLoadHook = JNIHook_ClassFileLoadHook;
         if (jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks)) != JVMTI_ERROR_NONE) {
+                LOG("ERR: Failed to setup class file load hook");
                 return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
         }
 
@@ -253,20 +269,24 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         JNIEnv *env;
 
         if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
+                LOG("ERR: Failed to get JNI\n");
                 return JNIHOOK_ERR_GET_JNI;
         }
 
         if (g_jnihook->jvmti->GetMethodDeclaringClass(method, &clazz) != JVMTI_ERROR_NONE) {
+                LOG("ERR: Failed to get declaring class of method\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
         }
 
         clazz_name = get_class_name(env, clazz);
         if (clazz_name.length() == 0) {
+                LOG("ERR: Failed to get class name\n");
                 return JNIHOOK_ERR_JNI_OPERATION;
         }
 
         auto method_info = get_method_info(g_jnihook->jvmti, method);
         if (!method_info) {
+                LOG("ERR: Failed to get method info\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
         }
 
@@ -276,6 +296,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         // Force caching of the class being hooked
         if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
                 if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to enable class file load hook\n");
                         return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
                 }
 
@@ -294,13 +315,17 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 // TODO: Investigate why it breaks it (possibly NullPointerException in
                 //       JNIHook_ClassFileLoadHook)
                 if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to disable class file load hook\n");
                         return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
                 }
 
-                if (result != JVMTI_ERROR_NONE)
+                if (result != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to cache classfile (JVMTI error)\n");
                         return JNIHOOK_ERR_CLASS_FILE_CACHE;
+                }
 
                 if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+                        LOG("ERR: Failed to cache classfile\n");
                         return JNIHOOK_ERR_CLASS_FILE_CACHE;
                 }
         }
@@ -332,26 +357,39 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 try {
                         class_data = new_cf->toBytes();
                 } catch (const Exception &ex) {
+                        LOG("ERR: Failed to convert classfile to bytes: %s\n", ex.message.c_str());
                         return JNIHOOK_ERR_JVMTI_OPERATION;
                 } catch (...) {
+                        LOG("ERR: Failed to convert classfile to bytes\n");
                         return JNIHOOK_ERR_JVMTI_OPERATION;
                 }
 
-                if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE)
+                if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to get class loader\n");
                         return JNIHOOK_ERR_JVMTI_OPERATION;
+                }
 
                 class_copy = env->DefineClass(NULL, class_loader,
                                               reinterpret_cast<const jbyte *>(class_data.data()),
                                               class_data.size());
 
-                if (!class_copy)
+                if (!class_copy) {
+                        std::stringstream ss;
+
+                        ss << *new_cf;
+                        LOG("ERR: Failed to define class\n");
+                        LOG("===== CLASS DUMP =====");
+                        LOG("%s\n", ss.str().c_str());
+                        LOG("======================");
                         return JNIHOOK_ERR_JNI_OPERATION;
+                }
 
                 g_original_classes[clazz_name] = class_copy;
         }
 
         // Verify that everything was cached correctly
         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
+                LOG("ERR: Cached class file not found\n");
                 return JNIHOOK_ERR_CLASS_FILE_CACHE;
         }
 
@@ -369,6 +407,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 }
 
                 if (!orig || env->ExceptionOccurred()) {
+                        LOG("ERR: Exception while getting original method\n");
                         env->ExceptionClear();
                         return JNIHOOK_ERR_JAVA_EXCEPTION;
                 }
@@ -383,11 +422,15 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
 
         env->PushLocalFrame(16);
 
-        if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE)
+        if (g_jnihook->jvmti->GetCurrentThread(&curthread) != JVMTI_ERROR_NONE) {
+                LOG("ERR: Failed to get current thread\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
+        }
 
-        if (g_jnihook->jvmti->GetAllThreads(&thread_count, &threads) != JVMTI_ERROR_NONE)
+        if (g_jnihook->jvmti->GetAllThreads(&thread_count, &threads) != JVMTI_ERROR_NONE) {
+                LOG("ERR: Failed to get all threads\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
+        }
 
         // TODO: Only suspend/resume threads that are actually active
         for (jint i = 0; i < thread_count; ++i) {
@@ -401,6 +444,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         jnihook_result_t ret = JNIHOOK_ERR_JNI_OPERATION;
         g_hooks[clazz_name].push_back(hook_info);
         if (ret = ReapplyClass(clazz, clazz_name); ret != JNIHOOK_OK) {
+                LOG("ERR: Failed to reapply class\n");
                 g_hooks[clazz_name].pop_back();
                 goto RESUME_THREADS;
         }
@@ -412,6 +456,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         native_method.fnPtr = native_hook_method;
 
         if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
+                LOG("ERR: Failed to register natives\n");
                 g_hooks[clazz_name].pop_back();
                 ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
                 goto RESUME_THREADS;

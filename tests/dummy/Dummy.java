@@ -3,6 +3,12 @@ package dummy;
 import java.io.IOException;
 
 class Target {
+    public static class TargetSubclass {
+        public static void doWhatever() {
+            System.out.println("do whatever");
+        }
+    }
+
     public static Target newTarget() {
         return new Target();
     }
@@ -12,6 +18,14 @@ class Target {
     }
 
     public void sayHello() {
+        var a = new Runnable() {
+            public void run() {
+                System.out.println("runnable here");
+            }
+        };
+        a.run();
+        TargetSubclass.doWhatever();
+
         System.out.println("Hello from Target object!");
     }
 }
