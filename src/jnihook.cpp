@@ -260,7 +260,7 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
+_JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
         jclass clazz;
         std::string clazz_name;
@@ -358,10 +358,10 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                         class_data = new_cf->toBytes();
                 } catch (const Exception &ex) {
                         LOG("ERR: Failed to convert classfile to bytes: %s\n", ex.message.c_str());
-                        return JNIHOOK_ERR_JVMTI_OPERATION;
+                        return JNIHOOK_ERR_CLASSFILE_FORMAT;
                 } catch (...) {
                         LOG("ERR: Failed to convert classfile to bytes\n");
-                        return JNIHOOK_ERR_JVMTI_OPERATION;
+                        return JNIHOOK_ERR_CLASSFILE_FORMAT;
                 }
 
                 if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE) {
@@ -478,6 +478,21 @@ RESUME_THREADS:
 
         return ret;
 }
+
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
+JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
+{
+        try {
+                return _JNIHook_Attach(method, native_hook_method, original_method);
+        } catch (jnif::Exception ex) {
+                LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
+                return JNIHOOK_ERR_CLASSFILE_FORMAT;
+        } catch (...) {
+                LOG("ERR: Unhandled exception thrown\n");
+        }
+        return JNIHOOK_ERR_UNKNOWN;
+}
+
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Detach(jmethodID method)
