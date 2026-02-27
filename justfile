@@ -4,7 +4,7 @@ NTHREADS := `nproc`
 test-dev: build-dev
     cd build && java dummy.Dummy "`pwd`/libtest.so"
 
-debug-dev: build-dev
+debug: build-dev
     cd build && gdb \
         -ex 'set breakpoint pending on' \
         -ex 'break _JNIHook_Attach' \
