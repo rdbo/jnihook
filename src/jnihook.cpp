@@ -21,7 +21,9 @@
  */
 
 #include <algorithm>
+#include <atomic>
 #include <jnihook.h>
+#include <map>
 #include <sstream>
 #include <unordered_map>
 #include <string>
@@ -57,6 +59,7 @@ static std::unique_ptr<jnihook_t> g_jnihook = nullptr;
 static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
 static std::unordered_map<std::string, std::unique_ptr<ClassFile>> g_class_file_cache;
 static std::unordered_map<std::string, jclass> g_original_classes;
+static std::atomic<bool> g_force_class_caching = false;
 
 static std::string
 get_class_signature(jvmtiEnv *jvmti, jclass clazz)
@@ -142,7 +145,8 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
         auto class_name = get_class_name(jni_env, class_being_redefined);
 
         // Don't do anything for unhooked classes
-        if (class_name == "" || g_hooks.find(class_name) == g_hooks.end() || g_hooks[class_name].size() == 0)
+        // (unless g_force_class_caching is true)
+        if (class_name == "" || (g_hooks.find(class_name) == g_hooks.end() || g_hooks[class_name].size() == 0) && !g_force_class_caching)
                 return;
 
         // Cache parsed ClassFile if it's not cached yet
@@ -242,6 +246,157 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         return JNIHOOK_OK;
 }
 
+// Stores a loaded class in the class cache
+jnihook_result_t
+CacheClass(JNIEnv *env, jclass clazz)
+{
+        std::string clazz_name = get_class_name(env, clazz);
+
+        if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+                if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to enable class file load hook\n");
+                        return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+                }
+
+                // Enable forceful caching of classfiles
+                // WARN: If something goes wrong, every class
+                // that goes through the ClassFileLoadHook
+                // would get cached! May waste a ton of memory.
+                g_force_class_caching = true;
+                auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
+                g_force_class_caching = false;
+
+                // NOTE: We disable the ClassFileLoadHook here because it breaks
+                //       any `env->DefineClass()` calls. Also, it's not necessary
+                //       to keep it active at all times, we just have to use it for caching
+                //       classes that havent been cached yet.
+                // TODO: Investigate why it breaks it (possibly NullPointerException in
+                //       JNIHook_ClassFileLoadHook)
+                if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to disable class file load hook\n");
+                        return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
+                }
+
+                if (result != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to cache classfile (JVMTI error)\n");
+                        return JNIHOOK_ERR_CLASS_FILE_CACHE;
+                }
+
+                if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
+                        LOG("ERR: Failed to cache classfile\n");
+                        return JNIHOOK_ERR_CLASS_FILE_CACHE;
+                }
+        }
+
+        return JNIHOOK_OK;
+}
+
+// Copy a class and its inner classes
+jnihook_result_t
+CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name)
+{
+        jnihook_result_t result;
+        auto clazz_name = get_class_name(env, clazz);
+        std::map<jclass, std::string> additional_classes_to_copy = {};
+        jobject class_loader;
+
+        LOG("Copying class '%s' to: %s\n", clazz_name.c_str(), new_class_name.c_str());
+
+        // Cache class being copied
+        result = CacheClass(env, clazz);
+        if (result != JNIHOOK_OK)
+                return result;
+
+        // Find inner classes
+        auto &cf = g_class_file_cache[clazz_name];
+        for (auto &attr : cf->attrs) {
+                if (attr->kind == jnif::model::ATTR_NESTMEMBERS) {
+                        auto nested_members_attr = (NestMembersAttr *)attr;
+
+                        for (auto &class_index : nested_members_attr->classes) {
+                                auto inner_name = std::string(nested_members_attr->constPool->getClassName(class_index));
+                                auto inner_clazz = env->FindClass(inner_name.c_str());
+
+                                result = CacheClass(env, inner_clazz);
+                                if (result != JNIHOOK_OK)
+                                        return result;
+
+                                // Add inner class for copy
+                                // WARN: Assumes that the inner class name
+                                //       starts with the original class name
+                                inner_name.replace(0, clazz_name.length(), new_class_name);
+                                additional_classes_to_copy.insert({ inner_clazz, inner_name });
+                        }
+
+                        // NestMembers can only happen once per class
+                        break;
+                }
+        }
+
+        // Make copy of the class
+        if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
+                jclass class_copy;
+                auto new_cf = cf->clone();
+
+                // Rename the copy class
+                new_cf->rename(new_class_name.c_str());
+
+                // Make all methods final (may help with CallNonvirtual)
+                for (auto &method : new_cf->methods) {
+                        if (method.isInit())
+                                continue;
+
+                        const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
+                }
+
+
+#ifdef JNIHOOK_DEBUG
+                LOG("===== COPY CLASS DUMP =====\n");
+                std::stringstream ss;
+                ss << *new_cf;
+                LOG("%s\n", ss.str().c_str());
+                LOG("======================\n");
+#endif
+
+                std::vector<u1> class_data;
+                try {
+                        class_data = new_cf->toBytes();
+                } catch (const Exception &ex) {
+                        LOG("ERR: Failed to convert classfile to bytes: %s\n", ex.message.c_str());
+                        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
+                } catch (...) {
+                        LOG("ERR: Failed to convert classfile to bytes\n");
+                        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
+                }
+
+                if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE) {
+                        LOG("ERR: Failed to get class loader\n");
+                        return JNIHOOK_ERR_JVMTI_OPERATION;
+                }
+
+                class_copy = env->DefineClass(NULL, class_loader,
+                                              reinterpret_cast<const jbyte *>(class_data.data()),
+                                              class_data.size());
+
+                if (!class_copy) {
+                        LOG("ERR: Failed to define class\n");
+                        return JNIHOOK_ERR_JNI_OPERATION;
+                }
+
+                g_original_classes[clazz_name] = class_copy;
+        }
+
+        for (auto &[inner_clazz, inner_new_name] : additional_classes_to_copy) {
+                result = CopyClass(env, inner_clazz, inner_new_name);
+                if (result != JNIHOOK_OK) {
+                        LOG("ERR: Failed to copy inner class '%s' of class: %s\n", inner_new_name.c_str(), clazz_name.c_str());
+                        return result;
+                }
+        }
+
+        return JNIHOOK_OK;
+}
+
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Init(JavaVM *jvm)
 {
@@ -287,8 +442,8 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         jclass clazz;
         std::string clazz_name;
         hook_info_t hook_info;
-        jobject class_loader;
         JNIEnv *env;
+        jnihook_result_t result;
 
         if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
                 LOG("ERR: Failed to get JNI\n");
@@ -316,101 +471,15 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         hook_info.native_hook_method = native_hook_method;
 
         // Force caching of the class being hooked
-        if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-                if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
-                        LOG("ERR: Failed to enable class file load hook\n");
-                        return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
-                }
+        result = CacheClass(env, clazz);
+        if (result != JNIHOOK_OK)
+                return result;
 
-                // Temporarily register hook in g_hooks so that `ClassFileLoadHook` can see it
-                // Leaving it there could be a problem if this hook fails, it will still patch
-                // the class when JNIHook_Attach is called again for that same class, but won't
-                // register the native method, causing `java.lang.UnsatisfiedLinkError`.
-                g_hooks[clazz_name].push_back(hook_info);
-                auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
-                g_hooks[clazz_name].pop_back();
-
-                // NOTE: We disable the ClassFileLoadHook here because it breaks
-                //       any `env->DefineClass()` calls. Also, it's not necessary
-                //       to keep it active at all times, we just have to use it for caching
-                //       uncached hooked classes.
-                // TODO: Investigate why it breaks it (possibly NullPointerException in
-                //       JNIHook_ClassFileLoadHook)
-                if (g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL) != JVMTI_ERROR_NONE) {
-                        LOG("ERR: Failed to disable class file load hook\n");
-                        return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
-                }
-
-                if (result != JVMTI_ERROR_NONE) {
-                        LOG("ERR: Failed to cache classfile (JVMTI error)\n");
-                        return JNIHOOK_ERR_CLASS_FILE_CACHE;
-                }
-
-                if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-                        LOG("ERR: Failed to cache classfile\n");
-                        return JNIHOOK_ERR_CLASS_FILE_CACHE;
-                }
-        }
-
-        // Make copy of the class prior to hooking it
-        // (allows calling the original functions)
-        if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-                std::string new_class_name = clazz_name + "_" + GenerateUuid();
-                jclass class_copy;
-                auto &cf = g_class_file_cache[clazz_name];
-                auto new_cf = cf->clone();
-
-                // Rename the copy class
-                new_cf->rename(new_class_name.c_str());
-
-                // Inherit the original class
-                // auto orig_class_index = new_cf->addClass(clazz_name.c_str());
-                // new_cf->superClassIndex = orig_class_index;
-
-                // Make all methods final (may help with CallNonvirtual)
-                for (auto &method : new_cf->methods) {
-                        if (method.isInit())
-                                continue;
-
-                        const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
-                }
-
-
-#ifdef JNIHOOK_DEBUG
-                LOG("===== COPY CLASS DUMP =====");
-                std::stringstream ss;
-                ss << *new_cf;
-                LOG("%s\n", ss.str().c_str());
-                LOG("======================");
-#endif
-
-                std::vector<u1> class_data;
-                try {
-                        class_data = new_cf->toBytes();
-                } catch (const Exception &ex) {
-                        LOG("ERR: Failed to convert classfile to bytes: %s\n", ex.message.c_str());
-                        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
-                } catch (...) {
-                        LOG("ERR: Failed to convert classfile to bytes\n");
-                        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
-                }
-
-                if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE) {
-                        LOG("ERR: Failed to get class loader\n");
-                        return JNIHOOK_ERR_JVMTI_OPERATION;
-                }
-
-                class_copy = env->DefineClass(NULL, class_loader,
-                                              reinterpret_cast<const jbyte *>(class_data.data()),
-                                              class_data.size());
-
-                if (!class_copy) {
-                        LOG("ERR: Failed to define class\n");
-                        return JNIHOOK_ERR_JNI_OPERATION;
-                }
-
-                g_original_classes[clazz_name] = class_copy;
-        }
+        // Copy original class
+        std::string new_clazz_name = clazz_name + "_" + GenerateUuid();
+        result = CopyClass(env, clazz, new_clazz_name);
+        if (result != JNIHOOK_OK)
+                return result;
 
         // Verify that everything was cached correctly
         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
