@@ -293,7 +293,7 @@ CacheClass(JNIEnv *env, jclass clazz)
 
 // Copy a class and its inner classes
 jnihook_result_t
-CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name)
+CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::string nest_host="")
 {
         jnihook_result_t result;
         auto clazz_name = get_class_name(env, clazz);
@@ -334,6 +334,7 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name)
         }
 
         // Make copy of the class
+        LOG("Generating copy class...\n");
         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
                 jclass class_copy;
                 auto new_cf = cf->clone();
@@ -347,6 +348,19 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name)
                                 continue;
 
                         const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
+                }
+
+                // Replace NestHost class if needed
+                if (nest_host.length() > 0) {
+                        for (auto &attr : new_cf->attrs) {
+                                if (attr->kind != jnif::model::ATTR_NESTHOST)
+                                        continue;
+
+                                auto nest_host_attr = (NestHostAttr *)attr;
+                                auto host_index = nest_host_attr->hostClassIndex;
+                                auto name_index = nest_host_attr->constPool->getClassNameIndex(host_index);
+                                nest_host_attr->constPool->replaceUtf8(name_index, nest_host.c_str());
+                        }
                 }
 
 
@@ -387,12 +401,14 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name)
         }
 
         for (auto &[inner_clazz, inner_new_name] : additional_classes_to_copy) {
-                result = CopyClass(env, inner_clazz, inner_new_name);
+                result = CopyClass(env, inner_clazz, inner_new_name, new_class_name);
                 if (result != JNIHOOK_OK) {
                         LOG("ERR: Failed to copy inner class '%s' of class: %s\n", inner_new_name.c_str(), clazz_name.c_str());
                         return result;
                 }
         }
+
+        LOG("Class '%s' copied to '%s' successfully", clazz_name.c_str(), new_class_name.c_str());
 
         return JNIHOOK_OK;
 }
