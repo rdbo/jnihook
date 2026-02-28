@@ -408,7 +408,7 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::str
                 }
         }
 
-        LOG("Class '%s' copied to '%s' successfully", clazz_name.c_str(), new_class_name.c_str());
+        LOG("Class '%s' copied to '%s' successfully\n", clazz_name.c_str(), new_class_name.c_str());
 
         return JNIHOOK_OK;
 }
