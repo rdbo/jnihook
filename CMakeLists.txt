@@ -7,6 +7,7 @@ project(jnihook LANGUAGES C CXX)
 set (CMAKE_CXX_STANDARD 23) # Only necessary for <jnihook.hpp>. If you will use <jnihook.h> only, C++ 11 is fine.
 set(JAVA_HOME $ENV{JAVA_HOME} CACHE STRING "Set JAVA_HOME for dependency lookup")
 option(JNIHOOK_BUILD_TESTS "Enable building of tests" OFF)
+option(JNIHOOK_DEBUG "Enable debugging code for JNIHook" OFF)
 
 # external dependencies
 set(EXTERNAL_DEPENDENCIES_DIR "${PROJECT_SOURCE_DIR}/external")
@@ -34,6 +35,9 @@ set_target_properties(jnihooksingle PROPERTIES POSITION_INDEPENDENT_CODE True)
 #       since it uses a non-standard path across platforms ($JAVA_HOME/jre/lib/<ARCH>/server)
 target_link_directories(jnihooksingle PUBLIC "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/server" "${JAVA_HOME}/jre/lib/amd64/server/")
 target_link_libraries(jnihooksingle PUBLIC jvm jnif)
+if(JNIHOOK_DEBUG)
+	target_compile_definitions(jnihooksingle PUBLIC JNIHOOK_DEBUG=1)
+endif()
 
 # bundle static libraries
 set(JNIHOOK_BUNDLE_LIB_PATH "${PROJECT_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}jnihook${CMAKE_STATIC_LIBRARY_SUFFIX}")

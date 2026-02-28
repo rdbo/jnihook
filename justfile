@@ -16,7 +16,7 @@ debug: build-dev
 build-dev:
     mkdir -p build
     cd build && \
-        JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Debug -DJNIHOOK_BUILD_TESTS=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && \
+        JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Debug -DJNIHOOK_BUILD_TESTS=ON -DJNIHOOK_DEBUG=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && \
         make -j {{NTHREADS}}
 
 build-release:

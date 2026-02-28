@@ -20,7 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <iostream>
+#include <algorithm>
 #include <jnihook.h>
 #include <sstream>
 #include <unordered_map>
@@ -29,7 +29,7 @@
 #include <cstring>
 #include <jnif.hpp>
 #include "uuid.hpp"
-#ifndef NDEBUG
+#ifdef JNIHOOK_DEBUG
         #define LOG(...) {printf("[JNIHOOK] " __VA_ARGS__);fflush(stdout);}
 #else
         #define LOG(...)
@@ -151,6 +151,26 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
                 if (!cf)
                         return;
 
+#ifdef JNIHOOK_DEBUG
+                // Assert that parsed class is the same as original class
+                auto bytes = cf->toBytes();
+                auto len = static_cast<jint>(bytes.size());
+                bool check = true;
+                if (len != class_data_len) {
+                        LOG("WARN: The parsed classfile length is not the same as the original (expected: %d, found: %d)\n", class_data_len, len);
+                        check = false;
+                }
+                len = std::min({ len, class_data_len });
+                for (jint i = 0; i < len; ++i) {
+                        auto byte = bytes[i];
+                        auto expected = class_data[i];
+                        if (byte != expected) {
+                                LOG("WARN: Class file byte '%d' differs from original (expected: %d, found: %d)\n", i, byte, expected);
+                                check = false;
+                        }
+                }
+                LOG("Class file parse check: %s\n", check ? "OK" : "BAD");
+#endif
                 g_class_file_cache[class_name] = std::move(cf);
         }
 
@@ -170,6 +190,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         // NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
         //       Method references are not included here
         //       If the source file has more than one class, they are compiled as separate ClassFiles
+        /*
         for (auto &method : cf->methods) {
                 auto name = method.getName();
                 auto descriptor = method.getDesc();
@@ -201,6 +222,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         }
 
         // Redefine class with modified ClassFile
+*/
         auto cf_bytes = cf->toBytes();
 
         class_definition.klass = clazz;
@@ -358,10 +380,10 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                         class_data = new_cf->toBytes();
                 } catch (const Exception &ex) {
                         LOG("ERR: Failed to convert classfile to bytes: %s\n", ex.message.c_str());
-                        return JNIHOOK_ERR_CLASSFILE_FORMAT;
+                        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
                 } catch (...) {
                         LOG("ERR: Failed to convert classfile to bytes\n");
-                        return JNIHOOK_ERR_CLASSFILE_FORMAT;
+                        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
                 }
 
                 if (g_jnihook->jvmti->GetClassLoader(clazz, &class_loader) != JVMTI_ERROR_NONE) {
@@ -486,7 +508,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 return _JNIHook_Attach(method, native_hook_method, original_method);
         } catch (jnif::Exception ex) {
                 LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
-                return JNIHOOK_ERR_CLASSFILE_FORMAT;
+                return JNIHOOK_ERR_CLASS_FILE_FORMAT;
         } catch (...) {
                 LOG("ERR: Unhandled exception thrown\n");
         }
