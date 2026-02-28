@@ -375,6 +375,15 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                         const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
                 }
 
+
+#ifdef JNIHOOK_DEBUG
+                LOG("===== COPY CLASS DUMP =====");
+                std::stringstream ss;
+                ss << *new_cf;
+                LOG("%s\n", ss.str().c_str());
+                LOG("======================");
+#endif
+
                 std::vector<u1> class_data;
                 try {
                         class_data = new_cf->toBytes();
@@ -396,13 +405,7 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                                               class_data.size());
 
                 if (!class_copy) {
-                        std::stringstream ss;
-
-                        ss << *new_cf;
                         LOG("ERR: Failed to define class\n");
-                        LOG("===== CLASS DUMP =====");
-                        LOG("%s\n", ss.str().c_str());
-                        LOG("======================");
                         return JNIHOOK_ERR_JNI_OPERATION;
                 }
 
