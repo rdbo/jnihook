@@ -170,6 +170,7 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
                         }
                 }
                 LOG("Class file parse check: %s\n", check ? "OK" : "BAD");
+                // cf->dump("/tmp/ORIG.class");
 #endif
                 g_class_file_cache[class_name] = std::move(cf);
         }
@@ -190,7 +191,6 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         // NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
         //       Method references are not included here
         //       If the source file has more than one class, they are compiled as separate ClassFiles
-        /*
         for (auto &method : cf->methods) {
                 auto name = method.getName();
                 auto descriptor = method.getDesc();
@@ -222,7 +222,6 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         }
 
         // Redefine class with modified ClassFile
-*/
         auto cf_bytes = cf->toBytes();
 
         class_definition.klass = clazz;
@@ -236,6 +235,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 LOG("===== CLASS REAPPLIED =====\n");
                 LOG("%s\n", ss.str().c_str());
                 LOG("===========================\n");
+                // cf->dump("/tmp/DUMP.class");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
         }
 

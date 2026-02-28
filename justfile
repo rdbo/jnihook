@@ -25,5 +25,8 @@ build-release:
         JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Release -DJNIHOOK_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF && \
         make -j {{NTHREADS}}
 
+cfdiff cf1 cf2:
+    delta <(javap -v -p {{cf1}}) <(javap -v -p {{cf2}})
+
 clean:
     rm -rf build*
