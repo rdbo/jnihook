@@ -343,12 +343,12 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::str
                 new_cf->renameClass(new_class_name.c_str());
 
                 // Make all methods final (may help with CallNonvirtual)
-                for (auto &method : new_cf->methods) {
-                        if (method.isInit())
-                                continue;
+                // for (auto &method : new_cf->methods) {
+                //         if (method.isInit())
+                //                 continue;
 
-                        const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
-                }
+                //         const_cast<u2 &>(method.accessFlags) |= Method::FINAL;
+                // }
 
                 // Replace NestHost class if needed
                 if (nest_host.length() > 0) {
