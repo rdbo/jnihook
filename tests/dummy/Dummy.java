@@ -17,6 +17,10 @@ class Target {
         return t;
     }
 
+    public void say(String msg) {
+        System.out.println(msg);
+    }
+
     public void sayHello() {
         var a = new Runnable() {
             public void run() {
@@ -26,7 +30,11 @@ class Target {
         a.run();
         TargetSubclass.doWhatever();
 
-        System.out.println("Hello from Target object!");
+        // Force bad case for jnihook
+        var obj = (Object)this;
+        var obj2 = (Target)obj;
+
+        obj2.say("Hello from Target object!");
     }
 }
 
