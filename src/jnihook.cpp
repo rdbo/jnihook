@@ -293,7 +293,7 @@ CacheClass(JNIEnv *env, jclass clazz)
 
 // Copy a class and its inner classes
 jnihook_result_t
-CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::string nest_host="")
+CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::string nest_host="", std::string old_nest_host="")
 {
         jnihook_result_t result;
         auto clazz_name = get_class_name(env, clazz);
@@ -340,7 +340,7 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::str
                 auto new_cf = cf->clone();
 
                 // Rename the copy class
-                new_cf->rename(new_class_name.c_str());
+                new_cf->renameClass(new_class_name.c_str());
 
                 // Make all methods final (may help with CallNonvirtual)
                 for (auto &method : new_cf->methods) {
@@ -363,6 +363,10 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::str
                         }
                 }
 
+                // Rename references of NestHost class
+                if (nest_host.length() > 0 && old_nest_host.length() > 0) {
+                        new_cf->renameClass(old_nest_host.c_str(), nest_host.c_str());
+                }
 
 #ifdef JNIHOOK_DEBUG
                 LOG("===== COPY CLASS DUMP =====\n");
@@ -401,7 +405,7 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::str
         }
 
         for (auto &[inner_clazz, inner_new_name] : additional_classes_to_copy) {
-                result = CopyClass(env, inner_clazz, inner_new_name, new_class_name);
+                result = CopyClass(env, inner_clazz, inner_new_name, new_class_name, clazz_name);
                 if (result != JNIHOOK_OK) {
                         LOG("ERR: Failed to copy inner class '%s' of class: %s\n", inner_new_name.c_str(), clazz_name.c_str());
                         return result;
@@ -506,18 +510,25 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         // Get original method before applying hooks, because this is fallible
         if (original_method) {
                 jclass orig_class = g_original_classes[clazz_name];
+                std::string patched_signature = method_info->signature;
                 jmethodID orig;
+
+                for (size_t i = 0; (i = patched_signature.find(clazz_name, i)) != std::string::npos;) {
+                        patched_signature.replace(i, clazz_name.length(), new_clazz_name);
+                        i += new_clazz_name.length();
+                }
 
                 if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
                         orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
-                                                      method_info->signature.c_str());
+                                                      patched_signature.c_str());
                 } else {
                         orig = env->GetMethodID(orig_class, method_info->name.c_str(),
-                                                method_info->signature.c_str());
+                                                patched_signature.c_str());
                 }
 
                 if (!orig || env->ExceptionOccurred()) {
-                        LOG("ERR: Exception while getting original method\n");
+                        LOG("ERR: Exception while getting original method '%s -> %s'\n", method_info->name.c_str(), patched_signature.c_str());
+                        env->ExceptionDescribe();
                         env->ExceptionClear();
                         return JNIHOOK_ERR_JAVA_EXCEPTION;
                 }
