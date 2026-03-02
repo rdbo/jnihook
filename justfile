@@ -2,7 +2,7 @@ JAVA_HOME := `java -XshowSettings:properties -version 2>&1 | awk -F '= ' '/java.
 NTHREADS := `nproc`
 
 test-dev: build-dev
-    cd build && java dummy.Dummy "`pwd`/libtest.so"
+    cd build && java -noverify -XX:+AllowRedefinitionToAddDeleteMethods dummy.Dummy "`pwd`/libtest.so"
 
 debug: build-dev
     cd build && gdb \
