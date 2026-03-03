@@ -22,7 +22,7 @@ class Target {
     }
 
     public void sayHello() {
-        var a = new Runnable() {
+        Runnable a = new Runnable() {
             public void run() {
                 System.out.println("runnable here");
             }
@@ -31,8 +31,8 @@ class Target {
         TargetSubclass.doWhatever();
 
         // Force bad case for jnihook
-        var obj = (Object)this;
-        var obj2 = (Target)obj;
+        Object obj = (Object)this;
+        Target obj2 = (Target)obj;
 
         obj2.say("Hello from Target object!");
     }

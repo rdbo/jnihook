@@ -30,12 +30,16 @@
 #include <vector>
 #include <cstring>
 #include <jnif.hpp>
+#include "jvm.hpp"
 #include "uuid.hpp"
 #ifdef JNIHOOK_DEBUG
         #define LOG(...) {printf("[JNIHOOK] " __VA_ARGS__);fflush(stdout);}
 #else
         #define LOG(...)
 #endif
+
+extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
+extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
 
 using namespace jnif;
 
@@ -212,6 +216,10 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 if (!should_hook)
                         continue;
 
+                // New method
+                auto copyName = std::string(name) + "_____copy";
+                auto &copyMethod = cf->addMethod(copyName.c_str(), descriptor, Method::PRIVATE | Method::FINAL);
+
                 // Set method to native
                 *(u2 *)&method.accessFlags |= Method::NATIVE;
 
@@ -219,6 +227,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 for (size_t i = 0; i < method.attrs.size(); ++i) {
                         auto &attr = method.attrs[i];
                         if (attr.kind == ATTR_CODE) {
+                                copyMethod.attrs.add((Attr *)&attr);
                                 method.attrs.remove(i);
                                 break;
                         }
@@ -232,13 +241,13 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         class_definition.class_byte_count = cf_bytes.size();
         class_definition.class_bytes = cf_bytes.data();
         err = g_jnihook->jvmti->RedefineClasses(1, &class_definition);
+        std::stringstream ss;
+        LOG("===== CLASS REAPPLIED =====\n");
+        ss << *cf;
+        LOG("%s\n", ss.str().c_str());
+        LOG("===========================\n");
         if (err != JVMTI_ERROR_NONE) {
-                std::stringstream ss;
-                ss << *cf;
                 LOG("ERR: JVMTI error in ReapplyClass: %d\n", err);
-                LOG("===== CLASS REAPPLIED =====\n");
-                LOG("%s\n", ss.str().c_str());
-                LOG("===========================\n");
                 // cf->dump("/tmp/DUMP.class");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
         }
@@ -453,6 +462,55 @@ JNIHook_Init(JavaVM *jvm)
 
         g_jnihook = std::make_unique<jnihook_t>(jnihook_t { jvm, jvmti });
 
+        // Generate VM type hashmaps
+        LOG("Address of gHotspotVMStructs: %p\n", gHotSpotVMStructs);
+        LOG("Address of gHotspotVMTypes: %p\n", gHotSpotVMTypes);
+        VMTypes::init(gHotSpotVMStructs, gHotSpotVMTypes);
+
+        // Force AllowRedefinitionToAddDeleteMethods
+        auto jvm_flag_type_result = VMType::from_static("JVMFlag");
+        if (!jvm_flag_type_result) {
+                LOG("Failed to parse VMStructs\n");
+                return JNIHOOK_ERR_UNKNOWN;
+        }
+
+        LOG("VMStructs successfully parsed\n");
+        auto jvm_flag_type = jvm_flag_type_result.value();
+        auto jvm_flag_size = jvm_flag_type.size();
+        LOG("JVM Flag Type Size: %lu\n", jvm_flag_size);
+        auto flagsField = jvm_flag_type.get_field<void *>("flags").value();
+        LOG("Flags field: %p\n", flagsField);
+        auto numFlagsField = jvm_flag_type.get_field<int>("numFlags").value();
+        LOG("NumFlags field: %p\n", numFlagsField);
+        LOG("NumFlags: %d\n", *numFlagsField);
+        // auto nameField = jvm_flag_type.get_field<void>("_name").value();
+        // LOG("Name field: %p\n", nameField);
+        // auto addrField = jvm_flag_type.get_field<void>("_addr").value();
+        // LOG("Addr field: %p\n", addrField);
+
+        auto flags_buf = *(unsigned char **)flagsField; // flagTable
+        auto numFlags = *numFlagsField;
+        for (int i = 0; i < numFlags; ++i) {
+                auto flag = VMType::from_instance("JVMFlag", &flags_buf[i * jvm_flag_size]);
+                auto name_addr = flag->get_field<void *>("_name").value();
+                auto name = (char *)*name_addr;
+                LOG("FLAG: %s\n", name);
+
+                if (!name || strcmp(name, "AllowRedefinitionToAddDeleteMethods"))
+                        continue;
+
+                auto addr = *flag->get_field<bool *>("_addr").value();
+                LOG("ADDR: %p\n", addr);
+
+                auto value = (int *)addr;
+                LOG("VALUE: %d\n", *value);
+
+                *value = 1;
+                LOG("NEW VALUE: %d\n", *value);
+
+                break;
+        }
+
         return JNIHOOK_OK;
 }
 
@@ -496,38 +554,45 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                 return result;
 
         // Copy original class
-        std::string new_clazz_name = clazz_name + "_" + GenerateUuid();
-        result = CopyClass(env, clazz, new_clazz_name);
-        if (result != JNIHOOK_OK)
-                return result;
+        // std::string new_clazz_name = clazz_name + "_" + GenerateUuid();
+        // result = CopyClass(env, clazz, new_clazz_name);
+        // if (result != JNIHOOK_OK)
+        //         return result;
 
         // Verify that everything was cached correctly
+        g_original_classes[clazz_name] = clazz;
         if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
                 LOG("ERR: Cached class file not found\n");
+                LOG("===== CACHED CLASSES =====\n");
+                for (auto &[k, _] : g_original_classes) {
+                        LOG("Class: %s\n", k.c_str());
+                }
+                LOG("==========================\n")
                 return JNIHOOK_ERR_CLASS_FILE_CACHE;
         }
 
         // Get original method before applying hooks, because this is fallible
         if (original_method) {
                 jclass orig_class = g_original_classes[clazz_name];
-                std::string patched_signature = method_info->signature;
+                // std::string patched_signature = method_info->signature;
                 jmethodID orig;
+                std::string name = (method_info->name + "_____copy").c_str();
 
-                for (size_t i = 0; (i = patched_signature.find(clazz_name, i)) != std::string::npos;) {
-                        patched_signature.replace(i, clazz_name.length(), new_clazz_name);
-                        i += new_clazz_name.length();
-                }
+                // for (size_t i = 0; (i = patched_signature.find(clazz_name, i)) != std::string::npos;) {
+                //         patched_signature.replace(i, clazz_name.length(), new_clazz_name);
+                //         i += new_clazz_name.length();
+                // }
 
                 if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
-                        orig = env->GetStaticMethodID(orig_class, method_info->name.c_str(),
-                                                      patched_signature.c_str());
+                        orig = env->GetStaticMethodID(orig_class, name.c_str(),
+                                                      method_info->signature.c_str());
                 } else {
-                        orig = env->GetMethodID(orig_class, method_info->name.c_str(),
-                                                patched_signature.c_str());
+                        orig = env->GetMethodID(orig_class, name.c_str(),
+                                                method_info->signature.c_str());
                 }
 
                 if (!orig || env->ExceptionOccurred()) {
-                        LOG("ERR: Exception while getting original method '%s -> %s'\n", method_info->name.c_str(), patched_signature.c_str());
+                        LOG("ERR: Exception while getting original method '%s -> %s'\n", name.c_str(), method_info->signature.c_str());
                         env->ExceptionDescribe();
                         env->ExceptionClear();
                         return JNIHOOK_ERR_JAVA_EXCEPTION;

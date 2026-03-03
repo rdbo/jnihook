@@ -5,9 +5,11 @@
 #include <chrono>
 
 jclass Target_class;
-jmethodID orig_Target_sayHello;
+jmethodID orig_Target_sayHello = NULL;
 JNIEXPORT void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
+        if (!orig_Target_sayHello)
+                orig_Target_sayHello = jni->GetMethodID(Target_class, "sayHello_____copy", "()V");
         std::cout << "Target::sayHello HOOK CALLED!" << std::endl;
         std::cout << "Calling original method..." << std::endl;
         jni->CallNonvirtualVoidMethod(obj, Target_class, orig_Target_sayHello);
@@ -49,7 +51,12 @@ start()
                 goto DETACH;
         }
 
-        if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), &orig_Target_sayHello); result != JNIHOOK_OK) {
+        // if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), &orig_Target_sayHello); result != JNIHOOK_OK) {
+        //         std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+        //         goto DETACH;
+        // }
+
+        if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), NULL); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to attach hook: " << result << std::endl;
                 goto DETACH;
         }
