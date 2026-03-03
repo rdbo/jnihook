@@ -1,18 +1,21 @@
 #include <jnihook.h>
 #include <jnihook.hpp>
 #include <iostream>
-#include <thread>
-#include <chrono>
 
 jclass Target_class;
+jmethodID Target_sayHello_mid;
 jmethodID orig_Target_sayHello = NULL;
 JNIEXPORT void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
         if (!orig_Target_sayHello)
                 orig_Target_sayHello = jni->GetMethodID(Target_class, "sayHello_____copy", "()V");
         std::cout << "Target::sayHello HOOK CALLED!" << std::endl;
-        std::cout << "Calling original method..." << std::endl;
+        std::cout << "Calling original method..." << std::endl << std::endl;
         jni->CallNonvirtualVoidMethod(obj, Target_class, orig_Target_sayHello);
+
+        std::cout << std::endl << "I called the original method, now im gonna detach the hook" << std::endl;
+        JNIHook_Detach(Target_sayHello_mid);
+        std::cout << "Hook detached. Next time the method is called, it should do its default behavior." << std::endl << std::endl;
 }
 
 void
@@ -21,7 +24,6 @@ start()
         JavaVM *jvm;
         JNIEnv *env;
         jsize jvm_count;
-        jmethodID Target_sayHello_mid;
 
         // Setup JVM
         std::cout << "[*] Library loaded!" << std::endl;

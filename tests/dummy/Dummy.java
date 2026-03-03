@@ -57,6 +57,7 @@ public class Dummy {
 
         Target target = Target.returnTarget(Target.newTarget());
         target.sayHello();
+        target.sayHello();
 
         System.out.println("Done!");
     }
