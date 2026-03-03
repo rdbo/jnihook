@@ -310,6 +310,8 @@ CacheClass(JNIEnv *env, jclass clazz)
 }
 
 // Copy a class and its inner classes
+// (no longer used)
+/*
 jnihook_result_t
 CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::string nest_host="", std::string old_nest_host="")
 {
@@ -434,6 +436,7 @@ CopyClass(JNIEnv *env, jclass clazz, const std::string &new_class_name, std::str
 
         return JNIHOOK_OK;
 }
+*/
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Init(JavaVM *jvm)
