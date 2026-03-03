@@ -463,6 +463,8 @@ JNIHook_Init(JavaVM *jvm)
         g_jnihook = std::make_unique<jnihook_t>(jnihook_t { jvm, jvmti });
 
         // Generate VM type hashmaps
+        LOG("Address of gHotspotVMStructs: %p\n", gHotSpotVMStructs);
+        LOG("Address of gHotspotVMTypes: %p\n", gHotSpotVMTypes);
         VMTypes::init(gHotSpotVMStructs, gHotSpotVMTypes);
 
         // Force AllowRedefinitionToAddDeleteMethods
