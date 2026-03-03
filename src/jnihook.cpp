@@ -478,7 +478,7 @@ JNIHook_Init(JavaVM *jvm)
         auto jvm_flag_type = jvm_flag_type_result.value();
         auto jvm_flag_size = jvm_flag_type.size();
         LOG("JVM Flag Type Size: %lu\n", jvm_flag_size);
-        auto flagsField = jvm_flag_type.get_field<void>("flags").value();
+        auto flagsField = jvm_flag_type.get_field<void *>("flags").value();
         LOG("Flags field: %p\n", flagsField);
         auto numFlagsField = jvm_flag_type.get_field<int>("numFlags").value();
         LOG("NumFlags field: %p\n", numFlagsField);
@@ -488,7 +488,7 @@ JNIHook_Init(JavaVM *jvm)
         // auto addrField = jvm_flag_type.get_field<void>("_addr").value();
         // LOG("Addr field: %p\n", addrField);
 
-        auto flags_buf = (unsigned char *)flagsField;
+        auto flags_buf = *(unsigned char **)flagsField;
         auto numFlags = *numFlagsField;
         for (int i = 0; i < numFlags; ++i) {
                 auto flag = VMType::from_instance("JVMFlag", &flags_buf[i * jvm_flag_size]);
