@@ -135,6 +135,14 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
         return std::make_unique<method_info_t>(method_info_t { name_str, signature_str, access_flags });
 }
 
+static std::string
+get_copy_method_name(const std::string &method_name)
+{
+        static std::string uuid = GenerateUuid();
+
+        return method_name + "_____jnihook_" + uuid;
+}
+
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
                                        JNIEnv* jni_env,
                                        jclass class_being_redefined,
@@ -217,7 +225,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                         continue;
 
                 // New method
-                auto copyName = std::string(name) + "_____copy";
+                auto copyName = get_copy_method_name(name);
                 auto &copyMethod = cf->addMethod(copyName.c_str(), descriptor, Method::PRIVATE | Method::FINAL);
 
                 // Set method to native
@@ -621,7 +629,7 @@ RESUME_THREADS:
         if (original_method) {
                 jclass orig_class = clazz;
                 jmethodID orig;
-                std::string name = (method_info->name + "_____copy");
+                std::string name = get_copy_method_name(method_info->name);
 
                 if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
                         orig = env->GetStaticMethodID(orig_class, name.c_str(),
