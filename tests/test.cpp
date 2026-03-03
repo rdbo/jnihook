@@ -53,11 +53,6 @@ start()
                 goto DETACH;
         }
 
-        // if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), &orig_Target_sayHello); result != JNIHOOK_OK) {
-        //         std::cerr << "[!] Failed to attach hook: " << result << std::endl;
-        //         goto DETACH;
-        // }
-
         if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), &orig_Target_sayHello); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to attach hook: " << result << std::endl;
                 goto DETACH;
