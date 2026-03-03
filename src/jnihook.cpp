@@ -554,54 +554,6 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         if (result != JNIHOOK_OK)
                 return result;
 
-        // Copy original class
-        // std::string new_clazz_name = clazz_name + "_" + GenerateUuid();
-        // result = CopyClass(env, clazz, new_clazz_name);
-        // if (result != JNIHOOK_OK)
-        //         return result;
-
-        // Verify that everything was cached correctly
-        g_original_classes[clazz_name] = clazz;
-        if (g_original_classes.find(clazz_name) == g_original_classes.end()) {
-                LOG("ERR: Cached class file not found\n");
-                LOG("===== CACHED CLASSES =====\n");
-                for (auto &[k, _] : g_original_classes) {
-                        LOG("Class: %s\n", k.c_str());
-                }
-                LOG("==========================\n")
-                return JNIHOOK_ERR_CLASS_FILE_CACHE;
-        }
-
-        // Get original method before applying hooks, because this is fallible
-        if (original_method) {
-                jclass orig_class = g_original_classes[clazz_name];
-                // std::string patched_signature = method_info->signature;
-                jmethodID orig;
-                std::string name = (method_info->name + "_____copy").c_str();
-
-                // for (size_t i = 0; (i = patched_signature.find(clazz_name, i)) != std::string::npos;) {
-                //         patched_signature.replace(i, clazz_name.length(), new_clazz_name);
-                //         i += new_clazz_name.length();
-                // }
-
-                if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
-                        orig = env->GetStaticMethodID(orig_class, name.c_str(),
-                                                      method_info->signature.c_str());
-                } else {
-                        orig = env->GetMethodID(orig_class, name.c_str(),
-                                                method_info->signature.c_str());
-                }
-
-                if (!orig || env->ExceptionOccurred()) {
-                        LOG("ERR: Exception while getting original method '%s -> %s'\n", name.c_str(), method_info->signature.c_str());
-                        env->ExceptionDescribe();
-                        env->ExceptionClear();
-                        return JNIHOOK_ERR_JAVA_EXCEPTION;
-                }
-
-                *original_method = orig;
-        }
-
         // Suspend other threads while the hook is being set up
         jthread curthread;
         jthread *threads;
@@ -649,8 +601,6 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                 goto RESUME_THREADS;
         }
 
-        ret = JNIHOOK_OK;
-
 RESUME_THREADS:
         // Resume other threads, hook already placed succesfully
         for (jint i = 0; i < thread_count; ++i) {
@@ -663,7 +613,40 @@ RESUME_THREADS:
         g_jnihook->jvmti->Deallocate(reinterpret_cast<unsigned char *>(threads));
         env->PopLocalFrame(NULL);
 
-        return ret;
+        if (ret != JNIHOOK_OK)
+                return ret;
+
+        // Get original method
+        ret = JNIHOOK_OK;
+        if (original_method) {
+                jclass orig_class = clazz;
+                jmethodID orig;
+                std::string name = (method_info->name + "_____copy");
+
+                if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
+                        orig = env->GetStaticMethodID(orig_class, name.c_str(),
+                                                      method_info->signature.c_str());
+                } else {
+                        orig = env->GetMethodID(orig_class, name.c_str(),
+                                                method_info->signature.c_str());
+                }
+
+                if (!orig || env->ExceptionOccurred()) {
+                        LOG("ERR: Exception while getting original method '%s -> %s'\n", name.c_str(), method_info->signature.c_str());
+                        env->ExceptionDescribe();
+                        env->ExceptionClear();
+                        ret = JNIHOOK_ERR_JAVA_EXCEPTION;
+                }
+
+                *original_method = orig;
+        }
+
+        if (ret != JNIHOOK_OK) {
+                JNIHook_Detach(method);
+                return ret;
+        }
+
+        return JNIHOOK_OK;
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
