@@ -95,8 +95,10 @@ private:
 		void *fieldAddress;
 		if (field->isStatic)
 			fieldAddress = (void *)field->address;
+		else if (this->instance)
+			fieldAddress = (void *)((uintptr_t)this->instance + field->offset);
 		else
-			fieldAddress = (void *)((uint64_t)this->instance + field->offset);
+			return std::nullopt;
 
 		return fieldAddress;
 	}
@@ -105,6 +107,7 @@ public:
 	// the following function will lookup the type in the
 	// VMTypes. If it is found, return successful std::optional
 	static std::optional<VMType> from_instance(const char *typeName, void *instance);
+	static std::optional<VMType> from_static(const char *typeName);
 
 	template <typename T>
 	std::optional<T *> get_field(const char *fieldName)

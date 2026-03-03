@@ -62,6 +62,15 @@ std::optional<VMTypeEntry *> VMTypes::find_type(const char *typeName)
 /* VMType */
 std::optional<VMType> VMType::from_instance(const char *typeName, void *instance)
 {
+        return from_static(typeName)
+                .and_then([instance](auto x){
+                        x.instance = instance;
+                        return std::optional(x);
+                });
+}
+
+std::optional<VMType> VMType::from_static(const char *typeName)
+{
         auto type = VMTypes::find_type(typeName);
         if (!type.has_value())
                 return std::nullopt;
@@ -71,7 +80,7 @@ std::optional<VMType> VMType::from_instance(const char *typeName, void *instance
                 return std::nullopt;
         
         VMType vmtype;
-        vmtype.instance = instance;
+        vmtype.instance = NULL;
         vmtype.type_entry = type.value();
         vmtype.fields = fields;
 

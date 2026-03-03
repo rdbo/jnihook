@@ -30,12 +30,16 @@
 #include <vector>
 #include <cstring>
 #include <jnif.hpp>
+#include "jvm.hpp"
 #include "uuid.hpp"
 #ifdef JNIHOOK_DEBUG
         #define LOG(...) {printf("[JNIHOOK] " __VA_ARGS__);fflush(stdout);}
 #else
         #define LOG(...)
 #endif
+
+extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
+extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
 
 using namespace jnif;
 
@@ -457,6 +461,53 @@ JNIHook_Init(JavaVM *jvm)
         }
 
         g_jnihook = std::make_unique<jnihook_t>(jnihook_t { jvm, jvmti });
+
+        // Generate VM type hashmaps
+        VMTypes::init(gHotSpotVMStructs, gHotSpotVMTypes);
+
+        // Force AllowRedefinitionToAddDeleteMethods
+        auto jvm_flag_type_result = VMType::from_static("JVMFlag");
+        if (!jvm_flag_type_result) {
+                LOG("Failed to parse VMStructs\n");
+                return JNIHOOK_ERR_UNKNOWN;
+        }
+
+        LOG("VMStructs successfully parsed\n");
+        auto jvm_flag_type = jvm_flag_type_result.value();
+        auto jvm_flag_size = jvm_flag_type.size();
+        LOG("JVM Flag Type Size: %lu\n", jvm_flag_size);
+        auto flagsField = jvm_flag_type.get_field<void>("flags").value();
+        LOG("Flags field: %p\n", flagsField);
+        auto numFlagsField = jvm_flag_type.get_field<int>("numFlags").value();
+        LOG("NumFlags field: %p\n", numFlagsField);
+        LOG("NumFlags: %d\n", *numFlagsField);
+        // auto nameField = jvm_flag_type.get_field<void>("_name").value();
+        // LOG("Name field: %p\n", nameField);
+        // auto addrField = jvm_flag_type.get_field<void>("_addr").value();
+        // LOG("Addr field: %p\n", addrField);
+
+        auto flags_buf = (unsigned char *)flagsField;
+        auto numFlags = *numFlagsField;
+        for (int i = 0; i < numFlags; ++i) {
+                auto flag = VMType::from_instance("JVMFlag", &flags_buf[i * jvm_flag_size]);
+                auto name_addr = flag->get_field<void *>("_name").value();
+                auto name = (char *)*name_addr;
+                LOG("FLAG: %s\n", name);
+
+                if (!name || strcmp(name, "AllowRedefinitionToAddDeleteMethods"))
+                        continue;
+
+                auto addr = *flag->get_field<bool *>("_addr").value();
+                LOG("ADDR: %p\n", addr);
+
+                auto value = (int *)addr;
+                LOG("VALUE: %d\n", *value);
+
+                *value = 1;
+                LOG("NEW VALUE: %d\n", *value);
+
+                break;
+        }
 
         return JNIHOOK_OK;
 }
