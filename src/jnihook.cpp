@@ -226,8 +226,9 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 // Remove "Code" attribute
                 for (size_t i = 0; i < method.attrs.size(); ++i) {
                         auto &attr = method.attrs[i];
+                        copyMethod.attrs.add((Attr *)&attr); // Copy method should inherit all the attributes
+                                                             // from the original method
                         if (attr.kind == ATTR_CODE) {
-                                copyMethod.attrs.add((Attr *)&attr);
                                 method.attrs.remove(i);
                                 break;
                         }
