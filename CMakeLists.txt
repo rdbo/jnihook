@@ -5,14 +5,13 @@ include(ExternalProject)
 project(jnihook LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 23) # Only necessary for <jnihook.hpp>. If you will use <jnihook.h> only, C++ 11 is fine.
-# cmake parses backslashes like \P from "C:\Program Files"
-# this here works on windows for me
-set(JAVA_HOME "$ENV{JAVA_HOME}" CACHE PATH "Set JAVA_HOME for dependency lookup")
+
+# properly encode path string
+set(JAVA_HOME "$ENV{JAVA_HOME}")
 if(JAVA_HOME)
-    file(TO_CMAKE_PATH "${JAVA_HOME}" JAVA_HOME)
-    set(JAVA_HOME "${JAVA_HOME}" CACHE PATH "Set JAVA_HOME for dependency lookup" FORCE)
-    set(ENV{JAVA_HOME} "${JAVA_HOME}")
+    file(TO_CMAKE_PATH "$ENV{JAVA_HOME}" JAVA_HOME)
 endif()
+set(JAVA_HOME "${JAVA_HOME}" CACHE PATH "Set JAVA_HOME for dependency lookup")
 option(JNIHOOK_BUILD_TESTS "Enable building of tests" OFF)
 option(JNIHOOK_DEBUG "Enable debugging code for JNIHook" OFF)
 
