@@ -517,10 +517,10 @@ JNIHook_Init(JavaVM *jvm)
                 LOG("ADDR: %p\n", addr);
 
                 auto value = reinterpret_cast<bool *>(addr);
-                LOG("VALUE: %d\n", *value ? 1 : 0);
+                LOG("VALUE: %d\n", (int)*value);
 
                 *value = true;
-                LOG("NEW VALUE: %d\n", *value ? 1 : 0);
+                LOG("NEW VALUE: %d\n", (int)*value);
 
                 break;
         }
