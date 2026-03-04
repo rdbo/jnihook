@@ -80,14 +80,18 @@ add_dependencies(jnihook jnihooksingle)
 # tests
 if (JNIHOOK_BUILD_TESTS)
     # Build Java classes
-    file(COPY "${PROJECT_SOURCE_DIR}/tests/dummy" DESTINATION .)
-    execute_process(COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/Dummy.java")
+    file(COPY "${PROJECT_SOURCE_DIR}/tests/dummy" DESTINATION "${PROJECT_BINARY_DIR}")
+    execute_process(
+            COMMAND "${JAVA_HOME}/bin/javac${CMAKE_EXECUTABLE_SUFFIX}" "dummy/Dummy.java"
+            WORKING_DIRECTORY "${PROJECT_BINARY_DIR}"
+    )
 
     # Build library to inject
     set(TESTS_DIR "${PROJECT_SOURCE_DIR}/tests")
     set(TESTS_SRC "${TESTS_DIR}/test.cpp")
     add_library(test SHARED ${TESTS_SRC})
     target_include_directories(test PUBLIC ${JNIHOOK_INC} ${JAVA_INCLUDES})
-    target_link_libraries(test PRIVATE jnihook)
+    target_link_directories(test PRIVATE "${JAVA_HOME}/lib" "${JAVA_HOME}/lib/server" "${JAVA_HOME}/jre/lib/amd64/server/")
+    target_link_libraries(test PRIVATE jnihooksingle jvm)
     set_target_properties(test PROPERTIES POSITION_INDEPENDENT_CODE True)
 endif ()
