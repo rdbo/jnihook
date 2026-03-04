@@ -35,6 +35,11 @@ void start(JavaVM *jvm)
 }
 ```
 
+## Note
+For the time being, you **cannot hook constructors** (a.k.a `<init>` methods).
+
+This is due to how the hooking method works and how the JVM operates.
+
 ## Building
 To build this, you can either compile all the files in `src` into your project, or
 use CMake to build a static library, which can be compiled into your project.
