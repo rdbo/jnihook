@@ -490,11 +490,13 @@ JNIHook_Init(JavaVM *jvm)
         auto jvm_flag_type = jvm_flag_type_result.value();
         auto jvm_flag_size = jvm_flag_type.size();
         LOG("JVM Flag Type Size: %lu\n", jvm_flag_size);
-        auto flagsField = jvm_flag_type.get_field<void *>("flags").value();
+        auto flagsFieldResult = jvm_flag_type.get_field<void *>("flags");
+        auto flagsField = flagsFieldResult.value();
         LOG("Flags field: %p\n", flagsField);
-        auto numFlagsField = jvm_flag_type.get_field<int>("numFlags").value();
+        auto numFlagsFieldResult = jvm_flag_type.get_field<size_t>("numFlags");
+        auto numFlagsField = numFlagsFieldResult.value();
         LOG("NumFlags field: %p\n", numFlagsField);
-        LOG("NumFlags: %d\n", *numFlagsField);
+        LOG("NumFlags: %llu\n", static_cast<unsigned long long>(*numFlagsField));
         // auto nameField = jvm_flag_type.get_field<void>("_name").value();
         // LOG("Name field: %p\n", nameField);
         // auto addrField = jvm_flag_type.get_field<void>("_addr").value();
@@ -502,7 +504,7 @@ JNIHook_Init(JavaVM *jvm)
 
         auto flags_buf = *(unsigned char **)flagsField; // flagTable
         auto numFlags = *numFlagsField;
-        for (int i = 0; i < numFlags; ++i) {
+        for (size_t i = 0; i < numFlags; ++i) {
                 auto flag = VMType::from_instance("JVMFlag", &flags_buf[i * jvm_flag_size]);
                 auto name_addr = flag->get_field<void *>("_name").value();
                 auto name = (char *)*name_addr;
@@ -514,11 +516,11 @@ JNIHook_Init(JavaVM *jvm)
                 auto addr = *flag->get_field<bool *>("_addr").value();
                 LOG("ADDR: %p\n", addr);
 
-                auto value = (int *)addr;
-                LOG("VALUE: %d\n", *value);
+                auto value = reinterpret_cast<bool *>(addr);
+                LOG("VALUE: %d\n", *value ? 1 : 0);
 
-                *value = 1;
-                LOG("NEW VALUE: %d\n", *value);
+                *value = true;
+                LOG("NEW VALUE: %d\n", *value ? 1 : 0);
 
                 break;
         }
