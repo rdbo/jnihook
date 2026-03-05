@@ -442,17 +442,12 @@ JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Init(JavaVM *jvm)
 {
         jvmtiEnv *jvmti;
-        jvmtiCapabilities capabilities;
+        jvmtiCapabilities capabilities = {};
         jvmtiEventCallbacks callbacks = {};
 
         if (jvm->GetEnv(reinterpret_cast<void **>(&jvmti), JVMTI_VERSION_1_2) != JNI_OK) {
                 LOG("ERR: Failed to get JVMTI");
                 return JNIHOOK_ERR_GET_JVMTI;
-        }
-
-        if (jvmti->GetPotentialCapabilities(&capabilities) != JVMTI_ERROR_NONE) {
-                LOG("ERR: Failed to get potential capabilities");
-                return JNIHOOK_ERR_ADD_JVMTI_CAPS;
         }
 
         capabilities.can_redefine_classes = 1;
