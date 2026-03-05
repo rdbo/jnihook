@@ -62,7 +62,7 @@ typedef struct hook_info_t {
 static std::unique_ptr<jnihook_t> g_jnihook = nullptr;
 static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
 static std::unordered_map<std::string, std::unique_ptr<ClassFile>> g_class_file_cache;
-static std::unordered_map<std::string, jclass> g_original_classes;
+// static std::unordered_map<std::string, jclass> g_original_classes;
 static std::atomic<bool> g_force_class_caching = false;
 
 static std::string
@@ -492,10 +492,6 @@ JNIHook_Init(JavaVM *jvm)
         auto numFlagsField = numFlagsFieldResult.value();
         LOG("NumFlags field: %p\n", numFlagsField);
         LOG("NumFlags: %llu\n", static_cast<unsigned long long>(*numFlagsField));
-        // auto nameField = jvm_flag_type.get_field<void>("_name").value();
-        // LOG("Name field: %p\n", nameField);
-        // auto addrField = jvm_flag_type.get_field<void>("_addr").value();
-        // LOG("Addr field: %p\n", addrField);
 
         auto flags_buf = *(unsigned char **)flagsField; // flagTable
         auto numFlags = *numFlagsField;
@@ -742,7 +738,8 @@ JNIHook_Shutdown()
 
         // TODO: Fully cleanup defined classes in `g_original_classes` by deleting them from the JVM memory
         //       (if possible without doing crazy hacks)
-        g_original_classes.clear();
+        // NOTE: The above is no longer needed due to changing the hooking method.
+        // g_original_classes.clear();
 
         g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
         g_jnihook->jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks));
