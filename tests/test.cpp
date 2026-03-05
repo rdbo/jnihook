@@ -48,6 +48,8 @@ start()
         std::cout << "[*] Target::sayHello: " << Target_sayHello_mid << std::endl;
 
         // Place hooks
+        JNIHook_Init(jvm); // Test to make sure init and shutdown are clean
+        JNIHook_Shutdown();
         if (auto result = JNIHook_Init(jvm); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
                 goto DETACH;
