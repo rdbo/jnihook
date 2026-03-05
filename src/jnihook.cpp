@@ -747,6 +747,14 @@ JNIHook_Shutdown()
         g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
         g_jnihook->jvmti->SetEventCallbacks(&callbacks, sizeof(callbacks));
 
+        jvmtiCapabilities caps{};
+		caps.can_redefine_classes = 1;
+		caps.can_redefine_any_class = 1;
+		caps.can_retransform_classes = 1;
+        caps.can_retransform_any_class = 1;
+		caps.can_suspend = 1;
+		jvmtiError err = g_jnihook->jvmti->RelinquishCapabilities(&caps);
+
         g_jnihook = nullptr;
 
         return JNIHOOK_OK;
