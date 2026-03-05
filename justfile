@@ -4,6 +4,9 @@ NTHREADS := `nproc`
 test-dev: build-dev
     cd build && java dummy.Dummy "`pwd`/libtest.so"
 
+test-release: build-release
+    cd build-release && java dummy.Dummy "`pwd`/libtest.so"
+
 debug: build-dev
     cd build && gdb \
         -ex 'set breakpoint pending on' \
@@ -19,10 +22,10 @@ build-dev:
         JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Debug -DJNIHOOK_BUILD_TESTS=ON -DJNIHOOK_DEBUG=ON -DCMAKE_EXPORT_COMPILE_COMMANDS=ON && \
         make -j {{NTHREADS}}
 
-build-release:
+build-release build_tests='ON':
     mkdir -p build-release
     cd build-release && \
-        JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Release -DJNIHOOK_BUILD_TESTS=OFF -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF && \
+        JAVA_HOME={{JAVA_HOME}} cmake .. -DCMAKE_BUILD_TYPE=Release -DJNIHOOK_BUILD_TESTS={{build_tests}} -DCMAKE_EXPORT_COMPILE_COMMANDS=OFF && \
         make -j {{NTHREADS}}
 
 cfdiff cf1 cf2:

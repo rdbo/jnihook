@@ -21,6 +21,11 @@ class Target {
         System.out.println(msg);
     }
 
+    public void sayAnotherThing(int number) {
+        this.say("Another thing from Target object!");
+        this.say("My number: " + number);
+    }
+
     public void sayHello() {
         Runnable a = new Runnable() {
             public void run() {
@@ -35,6 +40,8 @@ class Target {
         Target obj2 = (Target)obj;
 
         obj2.say("Hello from Target object!");
+
+        this.sayAnotherThing(10);
     }
 }
 

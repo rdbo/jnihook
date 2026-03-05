@@ -5,17 +5,33 @@
 jclass Target_class;
 jmethodID Target_sayHello_mid;
 jmethodID orig_Target_sayHello = NULL;
+jmethodID Target_sayAnotherThing_mid;
+jmethodID orig_Target_sayAnotherThing = NULL;
+
 JNIEXPORT void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
-        if (!orig_Target_sayHello)
-                orig_Target_sayHello = jni->GetMethodID(Target_class, "sayHello_____copy", "()V");
         std::cout << "Target::sayHello HOOK CALLED!" << std::endl;
         std::cout << "Calling original method..." << std::endl << std::endl;
         jni->CallNonvirtualVoidMethod(obj, Target_class, orig_Target_sayHello);
 
-        std::cout << std::endl << "I called the original method, now im gonna detach the hook" << std::endl;
+        std::cout << std::endl << "I called the original method Target::sayHello, now im gonna detach the hook" << std::endl;
         JNIHook_Detach(Target_sayHello_mid);
-        std::cout << "Hook detached. Next time the method is called, it should do its default behavior." << std::endl << std::endl;
+        std::cout << "Hook Target::sayHello detached. Next time the method is called, it should do its default behavior." << std::endl << std::endl;
+}
+
+JNIEXPORT void JNICALL hk_Target_sayAnotherThing(JNIEnv *jni, jobject obj, jint number)
+{
+        std::cout << "Target::sayAnotherThing HOOK CALLED!" << std::endl;
+        std::cout << "Original number: " << number << std::endl;
+        number = 1337;
+        std::cout << "New number: " << number << std::endl;
+
+        std::cout << "Calling original method..." << std::endl << std::endl;
+        jni->CallNonvirtualVoidMethod(obj, Target_class, orig_Target_sayAnotherThing, number);
+
+        std::cout << std::endl << "I called the original method Target::sayAnotherThing, now im gonna detach the hook" << std::endl;
+        JNIHook_Detach(Target_sayAnotherThing_mid);
+        std::cout << "Hook Target::sayAnotherThing detached. Next time the method is called, it should do its default behavior." << std::endl << std::endl;
 }
 
 void
@@ -47,6 +63,9 @@ start()
         Target_sayHello_mid = env->GetMethodID(Target_class, "sayHello", "()V");
         std::cout << "[*] Target::sayHello: " << Target_sayHello_mid << std::endl;
 
+        Target_sayAnotherThing_mid = env->GetMethodID(Target_class, "sayAnotherThing", "(I)V");
+        std::cout << "[*] Target::sayAnotherThing: " << Target_sayAnotherThing_mid << std::endl;
+
         // Place hooks
         JNIHook_Init(jvm); // Test to make sure init and shutdown are clean
         JNIHook_Shutdown();
@@ -54,18 +73,24 @@ start()
                 std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
                 goto DETACH;
         }
+        std::cout << "Target::sayHello hooked successfully!" << std::endl;
 
         if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), &orig_Target_sayHello); result != JNIHOOK_OK) {
+                std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+                goto DETACH;
+        }
+        std::cout << "Target::sayAnotherThing hooked successfully!" << std::endl;
+
+        if (auto result = JNIHook_Attach(Target_sayAnotherThing_mid, reinterpret_cast<void *>(hk_Target_sayAnotherThing), &orig_Target_sayAnotherThing); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to attach hook: " << result << std::endl;
                 goto DETACH;
         }
 
         std::cout << "[*] Hooks attached" << std::endl;
 
+DETACH:
         // JNIHook_Shutdown();
         // std::cout << "[*] JNIHook has been shut down" << std::endl;
-
-DETACH:
         jvm->DetachCurrentThread(); // NOTE: The JNIEnv must live until JNIHook_Shutdown() is called!
                                     //       (or if you won't call JNIHook again).
 }
