@@ -476,7 +476,7 @@ JNIHook_Init(JavaVM *jvm)
 
         // Force AllowRedefinitionToAddDeleteMethods
         auto jvm_flag_type_result = VMType::from_static("JVMFlag");
-        if (!jvm_flag_type_result) {
+        if (!jvm_flag_type_result && !(jvm_flag_type_result = VMType::from_static("Flag"))) {
                 LOG("Failed to parse VMStructs\n");
                 return JNIHOOK_ERR_UNKNOWN;
         }
@@ -496,7 +496,7 @@ JNIHook_Init(JavaVM *jvm)
         auto flags_buf = *(unsigned char **)flagsField; // flagTable
         auto numFlags = *numFlagsField;
         for (size_t i = 0; i < numFlags; ++i) {
-                auto flag = VMType::from_instance("JVMFlag", &flags_buf[i * jvm_flag_size]);
+                auto flag = VMType::from_instance(jvm_flag_type.get_type_name().c_str(), &flags_buf[i * jvm_flag_size]);
                 auto name_addr = flag->get_field<void *>("_name").value();
                 auto name = (char *)*name_addr;
                 LOG("FLAG: %s\n", name);
