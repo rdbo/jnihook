@@ -109,6 +109,7 @@ NOTE: Don't forget to include JNIHook's `include` dir in your project so that yo
 Special thanks to:
 - [@Lefraudeur](https://github.com/Lefraudeur) for helping me with information about JVM functionality throughout jnihook V1 development.
 - [@acuarica](https://github.com/acuarica) for the awesome JNIF library, which i modified to fit jnihook's use case.
+- [@griffith1deady](https://github.com/griffith1deady) for providing me informations about JVM internals.
 - [@TIMER-err](https://github.com/TIMER-err) for the jvm-runtime-noverify project, which made me realise I could patch flags at runtime cleanly.
 - [@awrped](http://github.com/awrped) for helping to fix Windows and JNIF issues.
 - myself for coming up with the V2 hooking method (c'mon, it was not an easy task)
