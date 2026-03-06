@@ -81,6 +81,7 @@ std::optional<VMType> VMType::from_static(const char *typeName)
         
         VMType vmtype;
         vmtype.instance = NULL;
+        vmtype.type_name = std::string(typeName);
         vmtype.type_entry = type.value();
         vmtype.fields = fields;
 

@@ -80,6 +80,7 @@ public:
 
 class VMType {
 private:
+	std::string type_name;
 	VMTypeEntry *type_entry;
 	std::optional<std::reference_wrapper<VMTypes::struct_entry_t>> fields;
 	void *instance; // pointer to instantiated VM type
@@ -117,6 +118,11 @@ public:
 			return std::nullopt;
 
 		return reinterpret_cast<T *>(fieldAddress.value());
+	}
+
+	const std::string &get_type_name()
+	{
+		return this->type_name;
 	}
 
 	inline void *get_instance()
