@@ -77,12 +77,12 @@ cd build
 
 **Linux/\*nix**:
 ```
-cmake ..
+cmake .. -DCMAKE_BUILD_TYPE=Release
 ```
 
 **Windows**:
 ```
-cmake .. -G "NMake Makefiles" -DCMAKE_CXX_STANDARD=17
+cmake .. -DCMAKE_BUILD_TYPE=Release -G "NMake Makefiles" -DCMAKE_CXX_STANDARD=17
 ```
 
 ---
