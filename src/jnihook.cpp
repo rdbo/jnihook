@@ -496,7 +496,7 @@ JNIHook_Init(JavaVM *jvm)
         auto flags_buf = *(unsigned char **)flagsField; // flagTable
         auto numFlags = *numFlagsField;
         for (size_t i = 0; i < numFlags; ++i) {
-                auto flag = VMType::from_instance(jvm_flag_type.get_type_name(), &flags_buf[i * jvm_flag_size]);
+                auto flag = VMType::from_instance(jvm_flag_type.get_type_name().c_str(), &flags_buf[i * jvm_flag_size]);
                 auto name_addr = flag->get_field<void *>("_name").value();
                 auto name = (char *)*name_addr;
                 LOG("FLAG: %s\n", name);
