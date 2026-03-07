@@ -226,7 +226,11 @@ ReapplyClass(jclass clazz, std::string clazz_name)
 
                 // New method
                 auto copyName = get_copy_method_name(name);
-                auto &copyMethod = cf->addMethod(copyName.c_str(), descriptor, Method::PRIVATE | Method::FINAL);
+                u2 copyflags = Method::PRIVATE | Method::FINAL;
+                if(method.accessFlags & Method::STATIC){
+                        copyflags |= Method::STATIC;
+                }
+                auto &copyMethod = cf->addMethod(copyName.c_str(), descriptor, copyflags);
 
                 // Set method to native
                 *(u2 *)&method.accessFlags |= Method::NATIVE;
