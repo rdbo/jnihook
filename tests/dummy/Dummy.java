@@ -21,9 +21,9 @@ class Target {
         System.out.println(msg);
     }
 
-    public void sayAnotherThing(int number) {
-        this.say("Another thing from Target object!");
-        this.say("My number: " + number);
+    public static void sayAnotherThing(int number) {
+        System.out.println("Another thing from Target object!");
+        System.out.println("My number: " + number);
     }
 
     public void sayHello() {
@@ -41,7 +41,7 @@ class Target {
 
         obj2.say("Hello from Target object!");
 
-        this.sayAnotherThing(10);
+        sayAnotherThing(10);
     }
 }
 
