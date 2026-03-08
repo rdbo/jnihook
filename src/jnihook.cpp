@@ -28,7 +28,6 @@
 #include <unordered_map>
 #include <string>
 #include <vector>
-#include <cstdarg>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -40,20 +39,6 @@
 #else
         #define LOG(...)
 #endif
-
-// File-based debug logging (always active)
-static inline void jnihook_log(const char *fmt, ...) {
-        FILE *f = fopen("/tmp/inspection.log", "a");
-        if (!f) return;
-        va_list ap;
-        va_start(ap, fmt);
-        fprintf(f, "[jnihook] ");
-        vfprintf(f, fmt, ap);
-        fputc('\n', f);
-        va_end(ap);
-        fclose(f);
-}
-#define LOGF(...) jnihook_log(__VA_ARGS__)
 
 extern "C" JNIIMPORT VMStructEntry *gHotSpotVMStructs;
 extern "C" JNIIMPORT VMTypeEntry *gHotSpotVMTypes;
@@ -175,13 +160,10 @@ void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
         // Calling get_class_name on NULL throws a JNI exception that poisons
         // the ongoing RetransformClasses call (JVMTI_ERROR_FAILS_VERIFICATION).
         if (!class_being_redefined) {
-                LOGF("ClassFileLoadHook: class_being_redefined=NULL, skipping (name=%s)", name ? name : "(null)");
                 return;
         }
 
         auto class_name = get_class_name(jni_env, class_being_redefined);
-        LOGF("ClassFileLoadHook: name='%s' force_cache=%d",
-             class_name.c_str(), (int)g_force_class_caching);
 
         // Don't do anything for unhooked classes
         // (unless g_force_class_caching is true)
@@ -228,9 +210,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
 {
         jvmtiClassDefinition class_definition;
         jvmtiError err;
-        LOGF("ReapplyClass: clazz_name='%s'", clazz_name.c_str());
         auto cf = g_class_file_cache[clazz_name]->clone();
-        LOGF("ReapplyClass: cloned, methods=%zu hooks=%zu", cf->methods.size(), g_hooks[clazz_name].size());
 
         // Patch class file
         // NOTE: The `methods` attribute only has the methods defined by the main class of this ClassFile
@@ -277,15 +257,12 @@ ReapplyClass(jclass clazz, std::string clazz_name)
         }
 
         // Redefine class with modified ClassFile
-        LOGF("ReapplyClass: calling toBytes()");
         auto cf_bytes = cf->toBytes();
-        LOGF("ReapplyClass: toBytes ok, size=%zu", cf_bytes.size());
 
         class_definition.klass = clazz;
         class_definition.class_byte_count = cf_bytes.size();
         class_definition.class_bytes = cf_bytes.data();
         err = g_jnihook->jvmti->RedefineClasses(1, &class_definition);
-        LOGF("ReapplyClass: RedefineClasses -> %d", (int)err);
         std::stringstream ss;
         LOG("===== CLASS REAPPLIED =====\n");
         ss << *cf;
@@ -305,11 +282,9 @@ jnihook_result_t
 CacheClass(JNIEnv *env, jclass clazz)
 {
         std::string clazz_name = get_class_name(env, clazz);
-        LOGF("CacheClass: clazz_name='%s'", clazz_name.c_str());
 
         if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
                 auto enableRes = g_jnihook->jvmti->SetEventNotificationMode(JVMTI_ENABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
-                LOGF("CacheClass: EnableEvent -> %d", (int)enableRes);
                 if (enableRes != JVMTI_ERROR_NONE) {
                         LOG("ERR: Failed to enable class file load hook\n");
                         return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
@@ -318,10 +293,8 @@ CacheClass(JNIEnv *env, jclass clazz)
                 g_force_class_caching = true;
                 auto result = g_jnihook->jvmti->RetransformClasses(1, &clazz);
                 g_force_class_caching = false;
-                LOGF("CacheClass: RetransformClasses -> %d", (int)result);
 
                 auto disableRes = g_jnihook->jvmti->SetEventNotificationMode(JVMTI_DISABLE, JVMTI_EVENT_CLASS_FILE_LOAD_HOOK, NULL);
-                LOGF("CacheClass: DisableEvent -> %d", (int)disableRes);
                 if (disableRes != JVMTI_ERROR_NONE) {
                         LOG("ERR: Failed to disable class file load hook\n");
                         return JNIHOOK_ERR_SETUP_CLASS_FILE_LOAD_HOOK;
@@ -331,12 +304,8 @@ CacheClass(JNIEnv *env, jclass clazz)
                 // failure), the ClassFileLoadHook may have already cached the
                 // class bytes, which is all we need for hooking.
                 if (g_class_file_cache.find(clazz_name) == g_class_file_cache.end()) {
-                        LOGF("CacheClass: FAIL class not cached, RetransformClasses error=%d", (int)result);
                         LOG("ERR: Failed to cache classfile\n");
                         return JNIHOOK_ERR_CLASS_FILE_CACHE;
-                }
-                if (result != JVMTI_ERROR_NONE) {
-                        LOGF("CacheClass: RetransformClasses error=%d but class is cached, proceeding", (int)result);
                 }
         }
 
@@ -524,21 +493,17 @@ JNIHook_Init(JavaVM *jvm)
         // to release its capabilities so a fresh env can acquire them.
         JNIEnv *jni = nullptr;
         jvm->GetEnv(reinterpret_cast<void **>(&jni), JNI_VERSION_1_8);
-        LOGF("Init: jni=%p", jni);
         if (jni) {
                 jvmtiEnv *old_jvmti = load_saved_jvmti(jni);
                 if (old_jvmti) {
-                        LOGF("Init: disposing old jvmti=%p", old_jvmti);
                         old_jvmti->DisposeEnvironment();
                 }
         }
 
         if (jvm->GetEnv(reinterpret_cast<void **>(&jvmti), JVMTI_VERSION_1_2) != JNI_OK) {
-                LOGF("Init: GetEnv JVMTI failed");
                 LOG("ERR: Failed to get JVMTI");
                 return JNIHOOK_ERR_GET_JVMTI;
         }
-        LOGF("Init: new jvmti=%p", jvmti);
 
         capabilities.can_redefine_classes = 1;
         capabilities.can_redefine_any_class = 1;
@@ -547,7 +512,6 @@ JNIHook_Init(JavaVM *jvm)
         capabilities.can_suspend = 1;
 
         auto capRes = jvmti->AddCapabilities(&capabilities);
-        LOGF("Init: AddCapabilities -> %d", (int)capRes);
         if (capRes != JVMTI_ERROR_NONE) {
                 LOG("ERR: Failed to add capabilities");
                 return JNIHOOK_ERR_ADD_JVMTI_CAPS;
@@ -592,7 +556,6 @@ JNIHook_Init(JavaVM *jvm)
 
         auto flags_buf = *(unsigned char **)flagsField; // flagTable
         auto numFlags = *numFlagsField;
-        LOGF("Init: scanning %zu JVM flags", (size_t)numFlags);
         int patched = 0;
         for (size_t i = 0; i < numFlags; ++i) {
                 auto flag = VMType::from_instance(jvm_flag_type.get_type_name().c_str(), &flags_buf[i * jvm_flag_size]);
@@ -602,15 +565,10 @@ JNIHook_Init(JavaVM *jvm)
                 if (!name)
                         continue;
 
-                // Log flags containing "erif" or "Allow" to discover actual names
-                if (strstr(name, "erif") || strstr(name, "Allow") || strstr(name, "Bytecode"))
-                        LOGF("  flag[%zu]: %s", i, name);
-
                 // AllowRedefinitionToAddDeleteMethods: allow adding copy methods
                 if (strcmp(name, "AllowRedefinitionToAddDeleteMethods") == 0) {
                         auto addr = *flag->get_field<bool *>("_addr").value();
                         auto value = reinterpret_cast<bool *>(addr);
-                        LOGF("  PATCH %s: %d -> true", name, (int)*value);
                         *value = true;
                         patched++;
                 }
@@ -620,12 +578,10 @@ JNIHook_Init(JavaVM *jvm)
                          strcmp(name, "BytecodeVerificationRemote") == 0) {
                         auto addr = *flag->get_field<bool *>("_addr").value();
                         auto value = reinterpret_cast<bool *>(addr);
-                        LOGF("  PATCH %s: %d -> false", name, (int)*value);
                         *value = false;
                         patched++;
                 }
         }
-        LOGF("Init: patched %d flags", patched);
 
         return JNIHOOK_OK;
 }
@@ -770,14 +726,11 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         try {
                 return _JNIHook_Attach(method, native_hook_method, original_method);
         } catch (jnif::Exception &ex) {
-                LOGF("Attach: JNIF exception: %s", ex.message.c_str());
                 LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
                 return JNIHOOK_ERR_CLASS_FILE_FORMAT;
         } catch (std::exception &ex) {
-                LOGF("Attach: std::exception: %s", ex.what());
                 LOG("ERR: Unhandled exception thrown\n");
         } catch (...) {
-                LOGF("Attach: unknown exception");
                 LOG("ERR: Unhandled exception thrown\n");
         }
         return JNIHOOK_ERR_UNKNOWN;
