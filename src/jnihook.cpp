@@ -31,6 +31,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <cinttypes>
 #include <jnif.hpp>
 #include "jvm.hpp"
 #include "uuid.hpp"
@@ -472,7 +473,7 @@ static void save_jvmti(JNIEnv *env, jvmtiEnv *jvmti)
                 "(Ljava/lang/String;Ljava/lang/String;)Ljava/lang/String;");
         if (!setProp) { env->ExceptionClear(); env->DeleteLocalRef(sysClass); return; }
         char buf[32];
-        snprintf(buf, sizeof(buf), "%lx", (unsigned long)(uintptr_t)jvmti);
+        snprintf(buf, sizeof(buf), "%" PRIxPTR, (uintptr_t)jvmti);
         jstring key = env->NewStringUTF("__jnihook_jvmti");
         jstring val = env->NewStringUTF(buf);
         env->CallStaticObjectMethod(sysClass, setProp, key, val);
@@ -556,7 +557,6 @@ JNIHook_Init(JavaVM *jvm)
 
         auto flags_buf = *(unsigned char **)flagsField; // flagTable
         auto numFlags = *numFlagsField;
-        int patched = 0;
         for (size_t i = 0; i < numFlags; ++i) {
                 auto flag = VMType::from_instance(jvm_flag_type.get_type_name().c_str(), &flags_buf[i * jvm_flag_size]);
                 auto name_addr = flag->get_field<void *>("_name").value();
@@ -570,7 +570,6 @@ JNIHook_Init(JavaVM *jvm)
                         auto addr = *flag->get_field<bool *>("_addr").value();
                         auto value = reinterpret_cast<bool *>(addr);
                         *value = true;
-                        patched++;
                 }
                 // BytecodeVerificationLocal/Remote: disable verification so
                 // RedefineClasses works on classes loaded with -noverify
@@ -579,7 +578,6 @@ JNIHook_Init(JavaVM *jvm)
                         auto addr = *flag->get_field<bool *>("_addr").value();
                         auto value = reinterpret_cast<bool *>(addr);
                         *value = false;
-                        patched++;
                 }
         }
 
@@ -729,7 +727,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
                 LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
                 return JNIHOOK_ERR_CLASS_FILE_FORMAT;
         } catch (std::exception &ex) {
-                LOG("ERR: Unhandled exception thrown\n");
+                LOG("ERR: Unhandled exception thrown: %s\n", ex.what());
         } catch (...) {
                 LOG("ERR: Unhandled exception thrown\n");
         }
