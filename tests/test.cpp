@@ -6,12 +6,14 @@ jclass Target_class;
 jmethodID Target_sayHello_mid;
 jmethodID orig_Target_sayHello = NULL;
 jmethodID Target_sayAnotherThing_mid;
+jmethodID Target_Constructor_mid;
 jmethodID orig_Target_sayAnotherThing = NULL;
+jmethodID orig_Target_Constructor = NULL;
 
 JNIEXPORT void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
         std::cout << "Target::sayHello HOOK CALLED!" << std::endl;
-        std::cout << "Calling original method..." << std::endl << std::endl;
+        std::cout << "Calling original method..." << std::endl;
         jni->CallNonvirtualVoidMethod(obj, Target_class, orig_Target_sayHello);
 
         std::cout << std::endl << "I called the original method Target::sayHello, now im gonna detach the hook" << std::endl;
@@ -32,6 +34,18 @@ JNIEXPORT void JNICALL hk_Target_sayAnotherThing(JNIEnv *jni, jclass clazz, jint
         std::cout << std::endl << "I called the original method Target::sayAnotherThing, now im gonna detach the hook" << std::endl;
         JNIHook_Detach(Target_sayAnotherThing_mid);
         std::cout << "Hook Target::sayAnotherThing detached. Next time the method is called, it should do its default behavior." << std::endl << std::endl;
+}
+
+JNIEXPORT void JNICALL hk_Target_Constructor(JNIEnv *jni, jobject object)
+{
+        std::cout << "Target::<init> HOOK CALLED!" << std::endl;
+
+        std::cout << "Calling original constructor..." << std::endl << std::endl;
+        jni->CallVoidMethod(object, orig_Target_Constructor);
+
+        std::cout << std::endl << "I called the original constructor Target::<init>, now im gonna detach the hook" << std::endl;
+        JNIHook_Detach(Target_Constructor_mid);
+        std::cout << "Hook Target::<init> detached. Next time the constructor is called, it should do its default behavior." << std::endl << std::endl;
 }
 
 void
@@ -66,6 +80,10 @@ start()
         Target_sayAnotherThing_mid = env->GetStaticMethodID(Target_class, "sayAnotherThing", "(I)V");
         std::cout << "[*] Target::sayAnotherThing: " << Target_sayAnotherThing_mid << std::endl;
 
+        Target_Constructor_mid = env->GetMethodID(Target_class, "<init>", "()V");
+        std::cout << "[*] Target::<init>: " << Target_Constructor_mid << std::endl;
+
+
         // Place hooks
         JNIHook_Init(jvm); // Test to make sure init and shutdown are clean
         JNIHook_Shutdown();
@@ -74,21 +92,27 @@ start()
                 goto DETACH;
         }
         std::cout << "[*] JNIHook initialized successfully";
-
+        
+        if (auto result = JNIHook_Attach(Target_Constructor_mid, reinterpret_cast<void*>(hk_Target_Constructor), &orig_Target_Constructor); result != JNIHOOK_OK) {
+            std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+            goto DETACH;
+        }
+        std::cout << "[*] Target::<init> hooked successfully!" << std::endl;
+        
         if (auto result = JNIHook_Attach(Target_sayHello_mid, reinterpret_cast<void *>(hk_Target_sayHello), &orig_Target_sayHello); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to attach hook: " << result << std::endl;
                 goto DETACH;
         }
         std::cout << "[*] Target::sayHello hooked successfully!" << std::endl;
-
+        
         if (auto result = JNIHook_Attach(Target_sayAnotherThing_mid, reinterpret_cast<void *>(hk_Target_sayAnotherThing), &orig_Target_sayAnotherThing); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to attach hook: " << result << std::endl;
                 goto DETACH;
         }
         std::cout << "[*] Target::sayAnotherThing hooked successfully!" << std::endl;
-
+            
         std::cout << "[*] Hooks attached" << std::endl;
-
+        
 DETACH:
         // JNIHook_Shutdown();
         // std::cout << "[*] JNIHook has been shut down" << std::endl;

@@ -136,11 +136,23 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
 }
 
 static std::string
-get_copy_method_name(const std::string &method_name)
+get_copy_method_name(const std::string &method_name, const std::string& class_name)
 {
         static std::string uuid = GenerateUuid();
-
-        return method_name + "_____jnihook_" + uuid;
+        std::string clazz = class_name + "_";
+        std::replace(clazz.begin(), clazz.end(), '/', '_');
+        if (method_name == "<init>") {
+            return "nativeinit_____jnihook_" + clazz + uuid;
+        }
+        return method_name + "_____jnihook_" + clazz + uuid;
+}
+static std::string
+get_copy_init_name(const std::string& method_name, const std::string& class_name)
+{
+    static std::string uuid = GenerateUuid();
+    std::string clazz = class_name + "_";
+    std::replace(clazz.begin(), clazz.end(), '/', '_');
+    return "constructor_____jnihook_" + clazz + uuid;
 }
 
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
@@ -225,25 +237,123 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                         continue;
 
                 // New method
-                auto copyName = get_copy_method_name(name);
+                std::string newName = get_copy_method_name(name, cf->getThisClassName());
+                std::string copyName2 = get_copy_init_name(name, cf->getThisClassName());
                 u2 copyflags = Method::PRIVATE | Method::FINAL;
-                if (method.accessFlags & Method::STATIC){
-                        copyflags |= Method::STATIC;
+                if (method.accessFlags & Method::STATIC) {
+                    copyflags |= Method::STATIC;
                 }
-                auto &copyMethod = cf->addMethod(copyName.c_str(), descriptor, copyflags);
+                
+                // method IS <init>
+                if (method.isInit()) {
+                    auto& copyMethod = cf->addMethod(copyName2.c_str(), descriptor, Method::PRIVATE | Method::FINAL);
+                    auto& nativeMethod = cf->addMethod(newName.c_str(), descriptor, Method::PRIVATE | Method::FINAL);
+                    /*
+                        if method is init : <init> ()V
+                        create native method to store hook
+                        create copy of original method
 
-                // Set method to native
-                *(u2 *)&method.accessFlags |= Method::NATIVE;
+                        patch original method to invoke native method
+                    */
+                    
 
-                // Remove "Code" attribute
-                for (size_t i = 0; i < method.attrs.size(); ++i) {
-                        auto &attr = method.attrs[i];
-                        copyMethod.attrs.add((Attr *)&attr); // Copy method should inherit all the attributes
-                                                             // from the original method
+                    for (size_t i = 0; i < method.attrs.size(); ++i) {
+                        auto& attr = method.attrs[i];
                         if (attr.kind == ATTR_CODE) {
-                                method.attrs.remove(i);
-                                break;
+                            u2 code_nameindex = 0;
+                            // get index of "Code" from ConstPool
+                            for (ConstPool::Iterator it = attr.constPool->iterator(); it.hasNext(); it++) {
+                                ConstPool::Index i = *it;
+                                ConstPool::Tag tag = attr.constPool->getTag(i);
+                                if (tag == 1) {
+                                    std::string bytes = attr.constPool->getUtf8(i);
+                                    if (bytes == "Code") {
+                                        code_nameindex = i;
+                                    }
+                                }
+                            }
+
+                            CodeAttr* ca = cf->_arena.create<CodeAttr>(code_nameindex, cf.get());
+                            CodeAttr* orig_ca = ((CodeAttr*)&attr);
+                            InstList& instList = ca->instList;
+
+                            ca->maxStack = orig_ca->maxStack;
+                            ca->maxLocals = orig_ca->maxLocals;
+
+                            auto& orig_instList = orig_ca->instList;
+
+                            //copy constructor opcodes to copy method
+                            for (auto it = orig_instList.begin(); it != orig_instList.end(); it.operator++()) {
+                                if (it->_offset <= 1) {
+                                    /* 
+                                    skip
+                                     0: ( 42) aload_0 CS: PS:
+                                     1: (183) invokespecial CS: PS: #1 java/lang/Object.<init>: ()V
+                                    */
+                                    continue;
+                                }
+                                instList.copy(*it);
+                            }
+
+                            ca->codeLen = instList.size();
+                            ca->cfg = ((CodeAttr*)&attr)->cfg;
+                            copyMethod.attrs.add(ca);
+
+                            //patch original <init>
+                            auto nativeMethodid = cf->addMethodRef(cf->thisClassIndex, newName.c_str(), descriptor);
+                            auto iterator = orig_instList.begin();
+                            /*
+                            skip
+                            -1: empty
+                             0: ( 42) aload_0 CS: PS:
+                             1: (183) invokespecial CS: PS: #1 java/lang/Object.<init>: ()V
+                            */
+                            iterator.operator++();//-1
+                            iterator.operator++();//0
+                            iterator.operator++();//1
+                            orig_instList.addZero(Opcode::aload_0, *iterator);                          // this = this
+                            orig_instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod();
+                            orig_instList.addZero(Opcode::RETURN, *iterator);                         // return
+                            
+                            // memory leak?
+                            iterator->next = nullptr; // remove everything after
+                            
+
+                            orig_ca->codeLen = orig_instList.size();
+
+                            // remove line number table
+                            for (size_t i = 0; i < orig_ca->attrs.size(); i++) {
+                                if (orig_ca->attrs.attrs[i]->kind == ATTR_LNT) {
+                                    orig_ca->attrs.remove(i);
+                                }
+                            }
+                            
                         }
+                        else {
+                            copyMethod.attrs.add((Attr*)&attr);
+                            nativeMethod.attrs.add((Attr*)&attr);
+                        }
+                    }
+                    *(u2*)&nativeMethod.accessFlags |= Method::NATIVE;
+                }
+                else {
+
+                    // method IS NOT <init>
+                    auto& newMethod = cf->addMethod(newName.c_str(), descriptor, copyflags);
+
+                    // Set method to native
+                    *(u2*)&method.accessFlags |= Method::NATIVE;
+
+                    // Remove "Code" attribute
+                    for (size_t i = 0; i < method.attrs.size(); ++i) {
+                        auto& attr = method.attrs[i];
+                        newMethod.attrs.add((Attr*)&attr); // native method should inherit all the attributes
+                                                          // from the original method
+                        if (attr.kind == ATTR_CODE) {
+                            method.attrs.remove(i);
+                            break;
+                        }
+                    }
                 }
         }
 
@@ -549,6 +659,11 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         }
 
         auto method_info = get_method_info(g_jnihook->jvmti, method);
+        std::string copy_name = method_info->name;
+        if (method_info->name == "<init>") {
+            copy_name = get_copy_method_name(method_info->name, clazz_name);
+        }
+
         if (!method_info) {
                 LOG("ERR: Failed to get method info\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -595,18 +710,18 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                 g_hooks[clazz_name].pop_back();
                 goto RESUME_THREADS;
         }
-
+        
         // Register native method for JVM lookup
         JNINativeMethod native_method;
-        native_method.name = const_cast<char *>(method_info->name.c_str());
+        native_method.name = const_cast<char *>(copy_name.c_str());
         native_method.signature = const_cast<char *>(method_info->signature.c_str());
         native_method.fnPtr = native_hook_method;
 
         if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
-                LOG("ERR: Failed to register natives\n");
-                g_hooks[clazz_name].pop_back();
-                ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
-                goto RESUME_THREADS;
+            LOG("ERR: Failed to register natives\n");
+            g_hooks[clazz_name].pop_back();
+            ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
+            goto RESUME_THREADS;
         }
 
 RESUME_THREADS:
@@ -629,7 +744,12 @@ RESUME_THREADS:
         if (original_method) {
                 jclass orig_class = clazz;
                 jmethodID orig;
-                std::string name = get_copy_method_name(method_info->name);
+                
+                std::string name = get_copy_method_name(method_info->name,clazz_name);
+                
+                if (method_info->name == "<init>") {
+                    name = get_copy_init_name(method_info->name, clazz_name);
+                }
 
                 if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
                         orig = env->GetStaticMethodID(orig_class, name.c_str(),

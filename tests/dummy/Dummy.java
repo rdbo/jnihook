@@ -8,7 +8,9 @@ class Target {
             System.out.println("do whatever");
         }
     }
-
+    public Target() {
+        System.out.println("constructor");
+    }
     public static Target newTarget() {
         return new Target();
     }
@@ -61,7 +63,7 @@ public class Dummy {
         }
 
         System.in.read();
-
+        Target obj = new Target();
         Target target = Target.returnTarget(Target.newTarget());
         target.sayHello();
         target.sayHello();
