@@ -1,7 +1,7 @@
 package dummy;
 
 import java.io.IOException;
-
+import java.lang.Thread;
 class Target {
     public static class TargetSubclass {
         public static void doWhatever() {
@@ -45,7 +45,17 @@ class Target {
 
         sayAnotherThing(10);
     }
+    public int midFunctionTest(){
+        System.out.println("guess what");
+        System.out.println("what");
+        return 10;
+    }
+    public static void midFunctionTest2(){
+        System.out.println("blah blah");
+        System.out.println("something");
+    }
 }
+
 
 public class Dummy {
     public static void main(String[] args) throws IOException {
@@ -67,6 +77,9 @@ public class Dummy {
         Target target = Target.returnTarget(Target.newTarget());
         target.sayHello();
         target.sayHello();
+        target.midFunctionTest();
+        Target.midFunctionTest2();
+        Target.midFunctionTest2();
 
         System.out.println("Done!");
     }
