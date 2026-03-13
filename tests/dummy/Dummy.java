@@ -1,7 +1,7 @@
 package dummy;
 
 import java.io.IOException;
-import java.lang.Thread;
+
 class Target {
     public static class TargetSubclass {
         public static void doWhatever() {
