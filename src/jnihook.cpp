@@ -284,6 +284,16 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                         }
                     }
                 };
+                
+                auto deleteNextInsts = [](InstList::Iterator& iterator) {
+                    // from JNIF model.cpp InstList::~InstList()
+                    for (Inst* inst = iterator->next; inst != nullptr;) {
+                        Inst* next = inst->next;
+                        inst->~Inst();
+                        inst = next;
+                    }
+                    iterator->next = nullptr;
+                };
 
                 // constructor hook
                 if (hookType == hook_init or 
@@ -353,15 +363,14 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                                 orig_instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod()
                                 orig_instList.addZero(Opcode::RETURN, *iterator);                         // return
 
-                                // memory leak?
-                                iterator->next = nullptr; // remove everything after
+                                deleteNextInsts(iterator);
+
 
                                 orig_ca->codeLen = orig_instList.size();
                             }
                             else if (hookType == hook_clinit) {
                                 //patch original <clinit>
-                                // i am sure this is memory leak
-                                iterator->next = nullptr;
+                                deleteNextInsts(iterator);
                                 orig_instList.addInvoke(Opcode::invokestatic, nativeMethodid, *iterator); // nativeMethod()
                                 orig_instList.addZero(Opcode::RETURN, *iterator);                        // return
                             }
