@@ -9,10 +9,12 @@ jmethodID Target_sayAnotherThing_mid;
 jmethodID Target_Constructor_mid;
 jmethodID Target_midFunctionTest_mid;
 jmethodID Target_midFunctionTest2_mid;
+jmethodID Target_midFunctionTest3_mid;
 jmethodID orig_Target_sayAnotherThing = NULL;
 jmethodID orig_Target_Constructor = NULL;
 jmethodID orig_Target_midFunctionTest = NULL;
 jmethodID orig_Target_midFunctionTest2 = NULL;
+jmethodID orig_Target_midFunctionTest3 = NULL;
 
 JNIEXPORT void JNICALL hk_Target_sayHello(JNIEnv *jni, jobject obj)
 {
@@ -58,10 +60,13 @@ JNIEXPORT void JNICALL hk_Target_midFunctionTest(JNIEnv* jni, jobject object)
 }
 JNIEXPORT void JNICALL hk_Target_midFunctionTest2(JNIEnv* jni, jobject object)
 {
-    std::cout << "Lorem Ipsum" << std::endl;
+    std::cout << "Detaching midFunctionTest2" << std::endl;
     JNIHook_Detach(Target_midFunctionTest2_mid);
 }
-
+JNIEXPORT void JNICALL hk_Target_midFunctionTest3(JNIEnv* jni, jobject object)
+{
+    std::cout << "\033[9m\033[48;2;100;0;88m\033[38;2;50;170;255mSpace Monkey 2\033[0m" << std::endl;
+}
 void
 start()
 {
@@ -103,6 +108,9 @@ start()
         Target_midFunctionTest2_mid = env->GetStaticMethodID(Target_class, "midFunctionTest2", "()V");
         std::cout << "[*] Target::midFunctionTest2: " << Target_midFunctionTest2_mid << std::endl;
 
+        Target_midFunctionTest3_mid = env->GetStaticMethodID(Target_class, "midFunctionTest3", "()Ldummy/Target;");
+        std::cout << "[*] Target::midFunctionTest2: " << Target_midFunctionTest3_mid << std::endl;
+
         // Place hooks
         JNIHook_Init(jvm); // Test to make sure init and shutdown are clean
         JNIHook_Shutdown();
@@ -111,7 +119,7 @@ start()
                 goto DETACH;
         }
         std::cout << "[*] JNIHook initialized successfully";
-        
+
         if (auto result = JNIHook_Attach(Target_Constructor_mid, reinterpret_cast<void*>(hk_Target_Constructor), &orig_Target_Constructor); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
             goto DETACH;
@@ -123,23 +131,31 @@ start()
                 goto DETACH;
         }
         std::cout << "[*] Target::sayHello hooked successfully!" << std::endl;
-        
+
         if (auto result = JNIHook_Attach(Target_sayAnotherThing_mid, reinterpret_cast<void *>(hk_Target_sayAnotherThing), &orig_Target_sayAnotherThing); result != JNIHOOK_OK) {
                 std::cerr << "[!] Failed to attach hook: " << result << std::endl;
                 goto DETACH;
         }
+        std::cout << "[*] Target::sayAnotherThing hooked successfully!" << std::endl;
 
         if (auto result = JNIHook_Attach_MID(Target_midFunctionTest_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest), &orig_Target_midFunctionTest,5); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
             goto DETACH;
         }
+        std::cout << "[*] Target::midFunctionTest hooked successfully!" << std::endl;
+
         if (auto result = JNIHook_Attach_MID(Target_midFunctionTest2_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest2), &orig_Target_midFunctionTest2, 5); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
             goto DETACH;
         }
+        std::cout << "[*] Target::midFunctionTest2 hooked successfully!" << std::endl;
 
-        std::cout << "[*] Target::sayAnotherThing hooked successfully!" << std::endl;
-            
+        if (auto result = JNIHook_Attach_MID(Target_midFunctionTest3_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest3), &orig_Target_midFunctionTest3, 4); result != JNIHOOK_OK) {
+            std::cerr << "[!] Failed to attach hook: " << result << std::endl;
+            goto DETACH;
+        }
+        std::cout << "[*] Target::midFunctionTest3 hooked successfully!" << std::endl;
+
         std::cout << "[*] Hooks attached" << std::endl;
         
 DETACH:

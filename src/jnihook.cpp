@@ -275,6 +275,16 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 if (method.accessFlags & Method::STATIC) {
                     copyflags |= Method::STATIC;
                 }
+
+                auto deleteLNT = [](CodeAttr* orig_ca) {
+                    // remove line number table
+                    for (size_t i = 0; i < orig_ca->attrs.size(); i++) {
+                        if (orig_ca->attrs.attrs[i]->kind == ATTR_LNT) {
+                            orig_ca->attrs.remove(i);
+                        }
+                    }
+                };
+
                 // constructor hook
                 if (hookType == hook_init or 
                     hookType == hook_clinit) {
@@ -355,12 +365,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                                 orig_instList.addInvoke(Opcode::invokestatic, nativeMethodid, *iterator); // nativeMethod()
                                 orig_instList.addZero(Opcode::RETURN, *iterator);                        // return
                             }
-                            // remove line number table
-                            for (size_t i = 0; i < orig_ca->attrs.size(); i++) {
-                                if (orig_ca->attrs.attrs[i]->kind == ATTR_LNT) {
-                                    orig_ca->attrs.remove(i);
-                                }
-                            }
+                            deleteLNT(orig_ca);
                         }
                         else {
                             copyMethod.attrs.add((Attr*)&attr);
@@ -369,6 +374,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                     }
                     *(u2*)&nativeMethod.accessFlags |= Method::NATIVE;
                 }
+                // mid function hook
                 else if (hookType == hook_midfunction) {
                     /*
                         if midfunction hook
@@ -410,26 +416,23 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                                 }
                                 iterator.operator++();
                             }
+                            // instead of forcing all midhooks to be ()V increase max stack to prevent error defining
+                            // (returntype) (var) = this.nativeMethod();
+                            orig_ca->maxStack++;
                             if (copyflags & Method::STATIC) {
                                 instList.addInvoke(Opcode::invokestatic, nativeMethodid, *iterator); // nativeMethod()
                             }else {
                                 instList.addZero(Opcode::aload_0, *iterator);                          // this=this
                                 instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod()
                             }
-                            // remove line number table
-                            for (size_t i = 0; i < orig_ca->attrs.size(); i++) {
-                                if (orig_ca->attrs.attrs[i]->kind == ATTR_LNT) {
-                                    orig_ca->attrs.remove(i);
-                                }
-                            }
+                            deleteLNT(orig_ca);
                         }
                     }
 
                     *(u2*)&nativeMethod.accessFlags |= Method::NATIVE;
                 }
                 else {
-
-                    // method IS NOT <init>
+                    // default hook
                     auto& newMethod = cf->addMethod(newName.c_str(), descriptor, copyflags);
 
                     // Set method to native

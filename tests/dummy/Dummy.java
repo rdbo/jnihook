@@ -1,7 +1,6 @@
 package dummy;
 
 import java.io.IOException;
-
 class Target {
     public static class TargetSubclass {
         public static void doWhatever() {
@@ -54,6 +53,10 @@ class Target {
         System.out.println("blah blah");
         System.out.println("something");
     }
+    public static Target midFunctionTest3() {
+        System.out.println("returning target");
+        return new Target();
+    }
 }
 
 
@@ -80,7 +83,7 @@ public class Dummy {
         target.midFunctionTest();
         Target.midFunctionTest2();
         Target.midFunctionTest2();
-
+        Target.midFunctionTest3();
         System.out.println("Done!");
     }
 }
