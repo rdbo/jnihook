@@ -57,7 +57,15 @@ typedef struct method_info_t {
 typedef struct hook_info_t {
         method_info_t method_info;
         void *native_hook_method;
+        size_t hook_offset = 0;
 } hook_info_t;
+
+enum hkType {
+    hook_default = 0,
+    hook_init,
+    hook_clinit,
+    hook_midfunction,
+};
 
 static std::unique_ptr<jnihook_t> g_jnihook = nullptr;
 static std::unordered_map<std::string, std::vector<hook_info_t>> g_hooks;
@@ -134,15 +142,113 @@ get_method_info(jvmtiEnv *jvmti, jmethodID method)
 
         return std::make_unique<method_info_t>(method_info_t { name_str, signature_str, access_flags });
 }
-
+// generates name for new native method
 static std::string
-get_copy_method_name(const std::string &method_name)
+get_copy_method_name(const std::string &method_name, const std::string& class_name)
 {
         static std::string uuid = GenerateUuid();
-
-        return method_name + "_____jnihook_" + uuid;
+        std::string clazz = class_name + "_";
+        std::replace(clazz.begin(), clazz.end(), '/', '_');
+        // init methods have additional "constructor" to not overlap possible method named init or clinit
+        if (method_name == "<init>") {
+            return "init_____jnihook_constructor_" + clazz + uuid;
+        }
+        else if (method_name == "<clinit>") {
+            return "clinit_____jnihook_constructor_" + clazz + uuid;
+        }
+        return method_name + "_____jnihook_" + clazz + uuid;
 }
-
+// generates name for new copy of original method
+static std::string
+get_copy_clone_name(const std::string& method_name, const std::string& class_name)
+{
+    static std::string uuid = GenerateUuid();
+    std::string clazz = class_name + "_";
+    std::replace(clazz.begin(), clazz.end(), '/', '_');
+    // init methods have additional "constructor" to not overlap possible method named init or clinit
+    if (method_name == "<init>") {
+        return "init_clone_____jnihook_constructor_" + clazz + uuid;
+    }
+    else if (method_name == "<clinit>") {
+        return "clinit_clone_____jnihook_constructor_" + clazz + uuid;
+    }
+    return method_name + "_clone_____jnihook_" + clazz + uuid;
+}
+enum ArgType
+{
+    Boolean = 0,
+    Byte,
+    Char,
+    Short,
+    Int,
+    Long,
+    Float,
+    Double,
+    Object,
+};
+static std::vector<ArgType> get_arg(const std::string& desc) {
+    std::vector<ArgType> types;
+    size_t cursor = 0;
+    size_t start = desc.find('(');
+    if (start == std::string::npos) {
+        return types;
+    }
+    size_t end = desc.find(')');
+    if (end == std::string::npos) {
+        return types;
+    }
+    std::string args = desc.substr(start + 1, end - start - 1);
+    while (cursor < args.size()) {
+        auto& c = args[cursor];
+        switch (c) {
+        case '[' :
+            cursor++;
+            break;
+        case 'Z':
+            types.push_back(ArgType::Boolean);
+            cursor++;
+            break;
+        case 'B':
+            types.push_back(ArgType::Byte);
+            cursor++;
+            break;
+        case 'C':
+            types.push_back(ArgType::Char);
+            cursor++;
+            break;
+        case 'S':
+            types.push_back(ArgType::Short);
+            cursor++;
+            break;
+        case 'I':
+            types.push_back(ArgType::Int);
+            cursor++;
+            break;
+        case 'J':
+            types.push_back(ArgType::Long);
+            cursor++;
+            break;
+        case 'F':
+            types.push_back(ArgType::Float);
+            cursor++;
+            break;
+        case 'D':
+            types.push_back(ArgType::Double);
+            cursor++;
+            break;
+        case 'L':
+        {
+            size_t semicolon = args.find(';', cursor);
+            cursor = semicolon+1;
+            types.push_back(ArgType::Object);
+            break;
+        }
+        default:
+            cursor++;
+        }
+    }
+    return types;
+}
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
                                        JNIEnv* jni_env,
                                        jclass class_being_redefined,
@@ -214,36 +320,279 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 // Check if the current method is a method that should be hooked
                 // TODO: Use hashmap for faster lookup
                 bool should_hook = false;
+                size_t hook_offset = 0;
                 for (auto &hk_info : g_hooks[clazz_name]) {
                         auto &minfo = hk_info.method_info;
                         if (minfo.name == name && minfo.signature == descriptor) {
                                 should_hook = true;
+                                hook_offset = hk_info.hook_offset;
                                 break;
                         }
                 }
                 if (!should_hook)
                         continue;
 
-                // New method
-                auto copyName = get_copy_method_name(name);
-                u2 copyflags = Method::PRIVATE | Method::FINAL;
-                if (method.accessFlags & Method::STATIC){
-                        copyflags |= Method::STATIC;
+                hkType hookType = hook_default;
+                if (strcmp(name, "<init>") == 0) {
+                    hookType = hook_init;
                 }
-                auto &copyMethod = cf->addMethod(copyName.c_str(), descriptor, copyflags);
+                else if (strcmp(name, "<clinit>") == 0) {
+                    hookType = hook_clinit;
+                }
+                else if (hook_offset != 0) {
+                    hookType = hook_midfunction;
+                }
+                // New method
+                std::string newName = get_copy_method_name(name, cf->getThisClassName());
+                
+                u2 copyflags = Method::PRIVATE | Method::FINAL;
+                if (method.accessFlags & Method::STATIC) {
+                    copyflags |= Method::STATIC;
+                }
 
-                // Set method to native
-                *(u2 *)&method.accessFlags |= Method::NATIVE;
-
-                // Remove "Code" attribute
-                for (size_t i = 0; i < method.attrs.size(); ++i) {
-                        auto &attr = method.attrs[i];
-                        copyMethod.attrs.add((Attr *)&attr); // Copy method should inherit all the attributes
-                                                             // from the original method
-                        if (attr.kind == ATTR_CODE) {
-                                method.attrs.remove(i);
-                                break;
+                auto deleteLNT = [](CodeAttr* orig_ca) {
+                    // remove line number table
+                    for (size_t i = 0; i < orig_ca->attrs.size(); i++) {
+                        if (orig_ca->attrs.attrs[i]->kind == ATTR_LNT) {
+                            orig_ca->attrs.remove(i);
                         }
+                    }
+                };
+                
+                auto deleteNextInsts = [](InstList::Iterator& iterator) {
+                    // from JNIF model.cpp InstList::~InstList()
+                    for (Inst* inst = iterator->next; inst != nullptr;) {
+                        Inst* next = inst->next;
+                        inst->~Inst();
+                        inst = next;
+                    }
+                    iterator->next = nullptr;
+                };
+
+                // constructor hook
+                if (hookType == hook_init or 
+                    hookType == hook_clinit) {
+
+                    std::string copyName = get_copy_clone_name(name, cf->getThisClassName());
+                    auto& copyMethod = cf->addMethod(copyName.c_str(), descriptor, copyflags);
+                    auto& nativeMethod = cf->addMethod(newName.c_str(), descriptor, copyflags);
+
+
+                    for (size_t i = 0; i < method.attrs.size(); ++i) {
+                        auto& attr = method.attrs[i];
+                        if (attr.kind == ATTR_CODE) {
+                            u2 code_nameindex = 0;
+                            // get index of "Code" from ConstPool
+                            for (ConstPool::Iterator it = attr.constPool->iterator(); it.hasNext(); it++) {
+                                ConstPool::Index i = *it;
+                                ConstPool::Tag tag = attr.constPool->getTag(i);
+                                if (tag == ConstPool::Tag::UTF8) {
+                                    std::string bytes = attr.constPool->getUtf8(i);
+                                    if (bytes == "Code") {
+                                        code_nameindex = i;
+                                    }
+                                }
+                            }
+
+                            CodeAttr* ca = cf->_arena.create<CodeAttr>(code_nameindex, cf.get());
+                            CodeAttr* orig_ca = ((CodeAttr*)&attr);
+                            InstList& instList = ca->instList;
+
+                            ca->maxStack = orig_ca->maxStack;
+                            ca->maxLocals = orig_ca->maxLocals;
+
+                            auto& orig_instList = orig_ca->instList;
+                            //copy constructor opcodes to copy method
+                            bool allow_copy = false;
+                            size_t varsize = 0;
+                            for (auto it = orig_instList.begin().operator++(); it != orig_instList.end(); it.operator++()) {
+                                if (allow_copy) {
+                                    instList.copy(*it);
+                                    continue;
+                                }
+                                if (it->isInvoke() or it->isInvokeDynamic() or it->isInvokeInterface()) {
+                                    allow_copy = true;
+                                }
+                                else {
+                                    varsize++;
+                                }
+                            }
+
+                            ca->codeLen = instList.size();
+                            ca->cfg = ((CodeAttr*)&attr)->cfg;
+                            copyMethod.attrs.add(ca);
+
+                            auto nativeMethodid = cf->addMethodRef(cf->thisClassIndex, newName.c_str(), descriptor);
+                            auto iterator = orig_instList.begin();
+                            if (hookType == hook_init) {
+                                //patch original <init>
+                                // skip empty begin and invoke
+                                iterator.operator++();//empty
+                                iterator.operator++();//invoke
+
+                                // +1 for each var
+                                for (int c = 0; c < varsize; c++) {
+                                    iterator.operator++();
+                                }
+
+                                auto arg = get_arg(descriptor);
+                                orig_instList.addZero(Opcode::aload_0,*iterator);
+                                orig_ca->maxStack = orig_ca->maxStack + arg.size();
+
+                                int VarIndex = 1;
+                                for (size_t i = 0; i < arg.size();i++) {
+                                    auto& type = arg[i];
+                                    int ZeroOp = i+1;
+
+                                    if (i < 3) {
+                                        VarIndex += 1;
+                                        switch (type) {
+                                        case ArgType::Short: case ArgType::Byte: case ArgType::Char: case ArgType::Boolean: case ArgType::Int:
+                                            ZeroOp = static_cast<int>(Opcode::iload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Float:
+                                            ZeroOp = static_cast<int>(Opcode::fload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Object:
+                                            ZeroOp = static_cast<int>(Opcode::aload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Double:
+                                            ZeroOp = static_cast<int>(Opcode::dload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Long:
+                                            ZeroOp = static_cast<int>(Opcode::lload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        default:
+                                            return JNIHOOK_ERR_UNKNOWN;
+                                        }
+                                    }
+                                    else {
+                                        switch (type) {
+                                        case ArgType::Short: case ArgType::Byte: case ArgType::Char: case ArgType::Boolean: case ArgType::Int:
+                                            orig_instList.addVar(Opcode::iload, VarIndex, *iterator);
+                                            VarIndex += 1;
+                                            break;
+                                        case ArgType::Float:
+                                            orig_instList.addVar(Opcode::fload, VarIndex, *iterator);
+                                            VarIndex += 1;
+                                            break;
+                                        case ArgType::Object:
+                                            orig_instList.addVar(Opcode::aload, VarIndex, *iterator);
+                                            VarIndex += 1;
+                                            break;
+                                        case ArgType::Long:
+                                            orig_instList.addVar(Opcode::lload, VarIndex, *iterator);
+                                            VarIndex += 2;
+                                            break;
+                                        case ArgType::Double:
+                                            VarIndex += 2;
+                                            orig_instList.addVar(Opcode::dload, VarIndex, *iterator);
+                                            break;
+                                        default:
+                                            return JNIHOOK_ERR_UNKNOWN;
+                                        }
+                                    }
+                                }
+                                deleteNextInsts(iterator);
+                                orig_instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod()
+                                orig_instList.addZero(Opcode::RETURN, *iterator);                         // return
+
+                                orig_ca->codeLen = orig_instList.size();
+                            }
+                            else if (hookType == hook_clinit) {
+                                //patch original <clinit>
+                                deleteNextInsts(iterator);
+                                orig_instList.addInvoke(Opcode::invokestatic, nativeMethodid, *iterator); // nativeMethod()
+                                orig_instList.addZero(Opcode::RETURN, *iterator);                        // return
+                            }
+                            deleteLNT(orig_ca);
+                        }
+                        else {
+                            copyMethod.attrs.add((Attr*)&attr);
+                            nativeMethod.attrs.add((Attr*)&attr);
+                        }
+                    }
+                    *(u2*)&nativeMethod.accessFlags |= Method::NATIVE;
+                }
+                // mid function hook
+                else if (hookType == hook_midfunction) {
+                    /*
+                        if midfunction hook
+                        make native method to store hook
+                        invoke native method at specified offset
+                        how offset works:
+                        1-beginning of function
+                        n-each instruction is +1
+                    */
+                    auto& nativeMethod = cf->addMethod(newName.c_str(), descriptor, copyflags);
+                    
+                    for (size_t i = 0; i < method.attrs.size(); ++i) {
+                        auto& attr = method.attrs[i];
+                        nativeMethod.attrs.add((Attr*)&attr); // native method should inherit all the attributes
+                        if (attr.kind == ATTR_CODE) {
+                            nativeMethod.attrs.remove(i);
+                            u2 code_nameindex = 0;
+                            // get index of "Code" from ConstPool
+                            for (ConstPool::Iterator it = attr.constPool->iterator(); it.hasNext(); it++) {
+                                ConstPool::Index i = *it;
+                                ConstPool::Tag tag = attr.constPool->getTag(i);
+                                if (tag == 1) {
+                                    std::string bytes = attr.constPool->getUtf8(i);
+                                    if (bytes == "Code") {
+                                        code_nameindex = i;
+                                    }
+                                }
+                            }
+
+                            CodeAttr* orig_ca = ((CodeAttr*)&attr);
+                            InstList& instList = orig_ca->instList;
+
+                            auto nativeMethodid = cf->addMethodRef(cf->thisClassIndex, newName.c_str(), descriptor);
+                            auto iterator = instList.begin();
+                            
+                            for (size_t i = 0; i < hook_offset; i++) {
+                                if (iterator->next == nullptr) {
+                                    break;
+                                }
+                                iterator.operator++();
+                            }
+                            // instead of forcing all midhooks to be ()V increase max stack to prevent error defining
+                            // (returntype) (var) = this.nativeMethod();
+                            orig_ca->maxStack++;
+                            if (copyflags & Method::STATIC) {
+                                instList.addInvoke(Opcode::invokestatic, nativeMethodid, *iterator); // nativeMethod()
+                            }else {
+                                instList.addZero(Opcode::aload_0, *iterator);                          // this=this
+                                instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod()
+                            }
+                            deleteLNT(orig_ca);
+                        }
+                    }
+
+                    *(u2*)&nativeMethod.accessFlags |= Method::NATIVE;
+                }
+                else {
+                    // default hook
+                    auto& newMethod = cf->addMethod(newName.c_str(), descriptor, copyflags);
+
+                    // Set method to native
+                    *(u2*)&method.accessFlags |= Method::NATIVE;
+
+                    // Remove "Code" attribute
+                    for (size_t i = 0; i < method.attrs.size(); ++i) {
+                        auto& attr = method.attrs[i];
+                        newMethod.attrs.add((Attr*)&attr); // native method should inherit all the attributes
+                                                          // from the original method
+                        if (attr.kind == ATTR_CODE) {
+                            method.attrs.remove(i);
+                            break;
+                        }
+                    }
                 }
         }
 
@@ -524,13 +873,15 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-_JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
+_JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method,size_t offset)
 {
         jclass clazz;
         std::string clazz_name;
         hook_info_t hook_info;
         JNIEnv *env;
         jnihook_result_t result;
+
+        hkType hookType = hook_default;
 
         if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
                 LOG("ERR: Failed to get JNI\n");
@@ -549,6 +900,19 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         }
 
         auto method_info = get_method_info(g_jnihook->jvmti, method);
+        std::string native_name = method_info->name;
+        if (method_info->name == "<init>") {
+            hookType = hook_init;
+            native_name = get_copy_method_name(method_info->name, clazz_name);
+        }else if (method_info->name == "<clinit>") {
+            hookType = hook_clinit;
+            native_name = get_copy_method_name(method_info->name, clazz_name);
+        }
+        else if (offset != 0) {
+            hookType = hook_midfunction;
+            native_name = get_copy_method_name(method_info->name, clazz_name);
+        }
+
         if (!method_info) {
                 LOG("ERR: Failed to get method info\n");
                 return JNIHOOK_ERR_JVMTI_OPERATION;
@@ -556,6 +920,7 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
 
         hook_info.method_info = *method_info;
         hook_info.native_hook_method = native_hook_method;
+        hook_info.hook_offset = offset;
 
         // Force caching of the class being hooked
         result = CacheClass(env, clazz);
@@ -595,18 +960,18 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
                 g_hooks[clazz_name].pop_back();
                 goto RESUME_THREADS;
         }
-
+        
         // Register native method for JVM lookup
         JNINativeMethod native_method;
-        native_method.name = const_cast<char *>(method_info->name.c_str());
+        native_method.name = const_cast<char *>(native_name.c_str());
         native_method.signature = const_cast<char *>(method_info->signature.c_str());
         native_method.fnPtr = native_hook_method;
 
         if (env->RegisterNatives(clazz, &native_method, 1) < 0) {
-                LOG("ERR: Failed to register natives\n");
-                g_hooks[clazz_name].pop_back();
-                ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
-                goto RESUME_THREADS;
+            LOG("ERR: Failed to register natives\n");
+            g_hooks[clazz_name].pop_back();
+            ReapplyClass(clazz, clazz_name); // Attempt to restore class to previous state
+            goto RESUME_THREADS;
         }
 
 RESUME_THREADS:
@@ -629,18 +994,31 @@ RESUME_THREADS:
         if (original_method) {
                 jclass orig_class = clazz;
                 jmethodID orig;
-                std::string name = get_copy_method_name(method_info->name);
+                
+                std::string original_name; 
+                switch (hookType) {
+                case hook_init:
+                case hook_clinit:
+                    original_name = get_copy_clone_name(method_info->name, clazz_name);
+                    break;
+                case hook_midfunction:
+                    original_name = method_info->name;
+                    break;
+                case hook_default:
+                    original_name = get_copy_method_name(method_info->name, clazz_name);
+                    break;
+                }
 
                 if ((method_info->access_flags & Method::STATIC) == Method::STATIC) {
-                        orig = env->GetStaticMethodID(orig_class, name.c_str(),
+                        orig = env->GetStaticMethodID(orig_class, original_name.c_str(),
                                                       method_info->signature.c_str());
                 } else {
-                        orig = env->GetMethodID(orig_class, name.c_str(),
+                        orig = env->GetMethodID(orig_class, original_name.c_str(),
                                                 method_info->signature.c_str());
                 }
 
                 if (!orig || env->ExceptionOccurred()) {
-                        LOG("ERR: Exception while getting original method '%s -> %s'\n", name.c_str(), method_info->signature.c_str());
+                        LOG("ERR: Exception while getting original method '%s -> %s'\n", original_name.c_str(), method_info->signature.c_str());
                         env->ExceptionDescribe();
                         env->ExceptionClear();
                         ret = JNIHOOK_ERR_JAVA_EXCEPTION;
@@ -661,7 +1039,7 @@ JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
         try {
-                return _JNIHook_Attach(method, native_hook_method, original_method);
+                return _JNIHook_Attach(method, native_hook_method, original_method,0);
         } catch (jnif::Exception ex) {
                 LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
                 return JNIHOOK_ERR_CLASS_FILE_FORMAT;
@@ -670,7 +1048,21 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
         }
         return JNIHOOK_ERR_UNKNOWN;
 }
-
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
+JNIHook_Attach_MID(jmethodID method, void* native_hook_method, jmethodID* original_method,size_t offset)
+{
+    try {
+        return _JNIHook_Attach(method, native_hook_method, original_method,offset);
+    }
+    catch (jnif::Exception ex) {
+        LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
+        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
+    }
+    catch (...) {
+        LOG("ERR: Unhandled exception thrown\n");
+    }
+    return JNIHOOK_ERR_UNKNOWN;
+}
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Detach(jmethodID method)

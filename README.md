@@ -10,7 +10,7 @@ This project is licensed under the `GNU AGPL-3.0`. No later version is allowed.
 
 Read the file `LICENSE` for more information.
 
-## Example
+## Examples
 Hooking the function `static int myFunction(int mynumber, String name)` from a class `Dummy`:
 ```c++
 jmethodID originalMethod;
@@ -33,14 +33,31 @@ void start(JavaVM *jvm)
 							"(ILjava/lang/String;)I");
 
 	JNIHook_Init(jvm);
-	JNIHook_Attach(myFunctionID, hkMyFunction, &originalMethod);
+	JNIHook_Attach(myFunctionID, reinterpret_cast<void*>(hkMyFunction), &originalMethod);
 }
 ```
+Hooking the constructor from a class `Target`:
+```c++
+jmethodID originalInit;
+void hkMyInit(JNIEnv *env, jobject object, jint number)
+{
+	// Print parameters
+	std::cout << "[*] number value: " << number << std::endl;
 
-## Note
-For the time being, you **cannot hook constructors** (a.k.a `<init>` methods).
+	// Call the constructor with 'number' set to '1337'
+	env->CallVoidMethod(object, originalInit, 1337);
 
-This is due to how the hooking method works and how the JVM operates.
+	return;
+}
+void start(JavaVM *jvm)
+{	
+	jclass targetClass = env->FindClass("dummy/Target");
+	jmethodID myInitID = env->GetMethodID(targetClass, "<init>", "(I)V");
+
+	JNIHook_Init(jvm);
+	JNIHook_Attach(myInitID, reinterpret_cast<void*>(hkMyInit), &originalInit);
+}
+```
 
 ## Building
 To build this, you can either compile all the files in `src` into your project, or

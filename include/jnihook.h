@@ -73,6 +73,20 @@ JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method);
 
 /**
+ * Attaches a mid-function hook to a Java method
+ * NOTE: Native method signatures are as follows:
+ *           ReturnType (*fnPtr)(JNIEnv *env, jobject objectOrClass, ...);
+ *
+ * @param method The Java method being hooked
+ * @param native_hook_method The native method that will be called by the JVM instead of `method`
+ * @param original_method (optional) Output variable that will receive a copy of the original (unhooked) method
+ * @param offset (optional) Offset where hook call should be placed
+ * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
+ */
+JNIHOOK_API jnihook_result_t JNIHOOK_CALL
+JNIHook_Attach_MID(jmethodID method, void *native_hook_method, jmethodID *original_method,size_t offset=0);
+
+/**
  * Detaches a hook from a Java method
  *
  * @param method The method being unhooked
