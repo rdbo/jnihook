@@ -174,8 +174,10 @@ get_copy_clone_name(const std::string& method_name, const std::string& class_nam
     }
     return method_name + "_clone_____jnihook_" + clazz + uuid;
 }
+// unused
 static size_t get_arg_count(const std::string& desc) {
     size_t count = 0;
+    size_t cursor = 0;
     size_t start = desc.find('(');
     if (start == std::string::npos) {
         return 0;
@@ -184,22 +186,23 @@ static size_t get_arg_count(const std::string& desc) {
     if (end == std::string::npos) {
         return 0;
     }
-
     std::string args = desc.substr(start + 1, end - start - 1);
-    for (size_t i = 0; i < args.size(); i++) {
-        auto& c = args[i];
+    while (cursor < args.size()) {
+        auto& c = args[cursor];
         if (c == '[') {
-            args.erase(i, i + 1);
+            cursor++;
         }
         else if (c == 'L') {
-            size_t semicolon = args.find(';', 0);
-            if (semicolon != std::string::npos) {
-                args.erase(i, semicolon + 1);
-                count++;
-            }
+            size_t semicolon = args.find(';', cursor);
+            cursor += semicolon;
+            count++;
+        }
+        else {
+            count++;
+            cursor++;
         }
     }
-    return count + args.length();
+    return count;
 }
 
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
@@ -339,7 +342,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                             for (ConstPool::Iterator it = attr.constPool->iterator(); it.hasNext(); it++) {
                                 ConstPool::Index i = *it;
                                 ConstPool::Tag tag = attr.constPool->getTag(i);
-                                if (tag == 1) {
+                                if (tag == ConstPool::Tag::UTF8) {
                                     std::string bytes = attr.constPool->getUtf8(i);
                                     if (bytes == "Code") {
                                         code_nameindex = i;
@@ -355,18 +358,20 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                             ca->maxLocals = orig_ca->maxLocals;
 
                             auto& orig_instList = orig_ca->instList;
-
-                            int argc = get_arg_count(descriptor);
-
+                            
                             //copy constructor opcodes to copy method
                             bool allow_copy = false;
-                            for (auto it = orig_instList.begin(); it != orig_instList.end(); it.operator++()) {
+                            size_t stacksize = 0;
+                            for (auto it = orig_instList.begin().operator++(); it != orig_instList.end(); it.operator++()) {
                                 if (allow_copy) {
                                     instList.copy(*it);
                                     continue;
                                 }
                                 if (it->isInvoke() or it->isInvokeDynamic() or it->isInvokeInterface()) {
                                     allow_copy = true;
+                                }
+                                else {
+                                    stacksize++;
                                 }
                             }
 
@@ -378,34 +383,25 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                             auto iterator = orig_instList.begin();
                             if (hookType == hook_init) {
                                 //patch original <init>
-                                /*
-                                skip
-                                -1: empty
-                                 0: ( 42) aload_0 CS: PS:
-                                 1: (183) invokespecial CS: PS: #1 java/lang/Object.<init>: ()V
-                                */
-                                iterator.operator++();//-1
-                                iterator.operator++();//0
-                                iterator.operator++();//1
+                                // skip empty begin and invoke
+                                iterator.operator++();//empty
+                                iterator.operator++();//invoke
 
-                                // +1 for each argument
-                                for (int c = 0; c < argc; c++) {
+                                // +1 for each stack
+                                for (int c = 0; c < stacksize; c++) {
                                     iterator.operator++();
                                 }
 
                                 // copy stack
                                 for (auto it = orig_instList.begin().operator++(); it != orig_instList.end(); it.operator++()) {
-                                    if (it->_offset <= argc+1) {
+                                    if (it->_offset <= stacksize+1) {
                                         orig_instList.copy(*it,*iterator);
                                     }
                                     else { break; }
                                 }
-
+                                deleteNextInsts(iterator);
                                 orig_instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod()
                                 orig_instList.addZero(Opcode::RETURN, *iterator);                         // return
-
-                                deleteNextInsts(iterator);
-
 
                                 orig_ca->codeLen = orig_instList.size();
                             }
