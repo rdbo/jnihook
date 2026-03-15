@@ -174,37 +174,81 @@ get_copy_clone_name(const std::string& method_name, const std::string& class_nam
     }
     return method_name + "_clone_____jnihook_" + clazz + uuid;
 }
-// unused
-static size_t get_arg_count(const std::string& desc) {
-    size_t count = 0;
+enum ArgType
+{
+    Boolean = 0,
+    Byte,
+    Char,
+    Short,
+    Int,
+    Long,
+    Float,
+    Double,
+    Object,
+};
+static std::vector<ArgType> get_arg(const std::string& desc) {
+    std::vector<ArgType> types;
     size_t cursor = 0;
     size_t start = desc.find('(');
     if (start == std::string::npos) {
-        return 0;
+        return types;
     }
     size_t end = desc.find(')');
     if (end == std::string::npos) {
-        return 0;
+        return types;
     }
     std::string args = desc.substr(start + 1, end - start - 1);
     while (cursor < args.size()) {
         auto& c = args[cursor];
-        if (c == '[') {
+        switch (c) {
+        case '[' :
             cursor++;
-        }
-        else if (c == 'L') {
+            break;
+        case 'Z':
+            types.push_back(ArgType::Boolean);
+            cursor++;
+            break;
+        case 'B':
+            types.push_back(ArgType::Byte);
+            cursor++;
+            break;
+        case 'C':
+            types.push_back(ArgType::Char);
+            cursor++;
+            break;
+        case 'S':
+            types.push_back(ArgType::Short);
+            cursor++;
+            break;
+        case 'I':
+            types.push_back(ArgType::Int);
+            cursor++;
+            break;
+        case 'J':
+            types.push_back(ArgType::Long);
+            cursor++;
+            break;
+        case 'F':
+            types.push_back(ArgType::Float);
+            cursor++;
+            break;
+        case 'D':
+            types.push_back(ArgType::Double);
+            cursor++;
+            break;
+        case 'L':
+        {
             size_t semicolon = args.find(';', cursor);
-            cursor += semicolon;
-            count++;
+            cursor = semicolon+1;
+            types.push_back(ArgType::Object);
+            break;
         }
-        else {
-            count++;
+        default:
             cursor++;
         }
     }
-    return count;
+    return types;
 }
-
 void JNICALL JNIHook_ClassFileLoadHook(jvmtiEnv *jvmti_env,
                                        JNIEnv* jni_env,
                                        jclass class_being_redefined,
@@ -358,10 +402,9 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                             ca->maxLocals = orig_ca->maxLocals;
 
                             auto& orig_instList = orig_ca->instList;
-                            
                             //copy constructor opcodes to copy method
                             bool allow_copy = false;
-                            size_t stacksize = 0;
+                            size_t varsize = 0;
                             for (auto it = orig_instList.begin().operator++(); it != orig_instList.end(); it.operator++()) {
                                 if (allow_copy) {
                                     instList.copy(*it);
@@ -371,7 +414,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                                     allow_copy = true;
                                 }
                                 else {
-                                    stacksize++;
+                                    varsize++;
                                 }
                             }
 
@@ -387,17 +430,73 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                                 iterator.operator++();//empty
                                 iterator.operator++();//invoke
 
-                                // +1 for each stack
-                                for (int c = 0; c < stacksize; c++) {
+                                // +1 for each var
+                                for (int c = 0; c < varsize; c++) {
                                     iterator.operator++();
                                 }
 
-                                // copy stack
-                                for (auto it = orig_instList.begin().operator++(); it != orig_instList.end(); it.operator++()) {
-                                    if (it->_offset <= stacksize+1) {
-                                        orig_instList.copy(*it,*iterator);
+                                auto arg = get_arg(descriptor);
+                                orig_instList.addZero(Opcode::aload_0,*iterator);
+                                orig_ca->maxStack = orig_ca->maxStack + arg.size();
+
+                                int VarIndex = 1;
+                                for (size_t i = 0; i < arg.size();i++) {
+                                    auto& type = arg[i];
+                                    int ZeroOp = i+1;
+
+                                    if (i < 3) {
+                                        VarIndex += 1;
+                                        switch (type) {
+                                        case ArgType::Short: case ArgType::Byte: case ArgType::Char: case ArgType::Boolean: case ArgType::Int:
+                                            ZeroOp = static_cast<int>(Opcode::iload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Float:
+                                            ZeroOp = static_cast<int>(Opcode::fload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Object:
+                                            ZeroOp = static_cast<int>(Opcode::aload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Double:
+                                            ZeroOp = static_cast<int>(Opcode::dload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        case ArgType::Long:
+                                            ZeroOp = static_cast<int>(Opcode::lload_0) + ZeroOp;
+                                            orig_instList.addZero(static_cast<Opcode>(ZeroOp), *iterator);
+                                            break;
+                                        default:
+                                            return JNIHOOK_ERR_UNKNOWN;
+                                        }
                                     }
-                                    else { break; }
+                                    else {
+                                        switch (type) {
+                                        case ArgType::Short: case ArgType::Byte: case ArgType::Char: case ArgType::Boolean: case ArgType::Int:
+                                            orig_instList.addVar(Opcode::iload, VarIndex, *iterator);
+                                            VarIndex += 1;
+                                            break;
+                                        case ArgType::Float:
+                                            orig_instList.addVar(Opcode::fload, VarIndex, *iterator);
+                                            VarIndex += 1;
+                                            break;
+                                        case ArgType::Object:
+                                            orig_instList.addVar(Opcode::aload, VarIndex, *iterator);
+                                            VarIndex += 1;
+                                            break;
+                                        case ArgType::Long:
+                                            orig_instList.addVar(Opcode::lload, VarIndex, *iterator);
+                                            VarIndex += 2;
+                                            break;
+                                        case ArgType::Double:
+                                            VarIndex += 2;
+                                            orig_instList.addVar(Opcode::dload, VarIndex, *iterator);
+                                            break;
+                                        default:
+                                            return JNIHOOK_ERR_UNKNOWN;
+                                        }
+                                    }
                                 }
                                 deleteNextInsts(iterator);
                                 orig_instList.addInvoke(Opcode::invokespecial, nativeMethodid, *iterator); // this.nativeMethod()
