@@ -174,18 +174,7 @@ get_copy_clone_name(const std::string& method_name, const std::string& class_nam
     }
     return method_name + "_clone_____jnihook_" + clazz + uuid;
 }
-enum ArgType
-{
-    Boolean = 0,
-    Byte,
-    Char,
-    Short,
-    Int,
-    Long,
-    Float,
-    Double,
-    Object,
-};
+
 static std::vector<ArgType> get_arg(const std::string& desc) {
     std::vector<ArgType> types;
     size_t cursor = 0;

@@ -135,4 +135,17 @@ public:
 	}
 };
 
+enum class ArgType
+{
+    Boolean,
+    Byte,
+    Char,
+    Short,
+    Int,
+    Long,
+    Float,
+    Double,
+    Object,
+};
+
 #endif
