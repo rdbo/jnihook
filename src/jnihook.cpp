@@ -24,6 +24,7 @@
 #include <atomic>
 #include <jnihook.h>
 #include <map>
+#include <optional>
 #include <sstream>
 #include <unordered_map>
 #include <string>
@@ -57,7 +58,7 @@ typedef struct method_info_t {
 typedef struct hook_info_t {
         method_info_t method_info;
         void *native_hook_method;
-        size_t hook_offset = 0;
+        std::optional<size_t> bytecode_offset;
 } hook_info_t;
 
 enum hkType {
@@ -309,12 +310,12 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 // Check if the current method is a method that should be hooked
                 // TODO: Use hashmap for faster lookup
                 bool should_hook = false;
-                size_t hook_offset = 0;
+                std::optional<size_t> bytecode_offset;
                 for (auto &hk_info : g_hooks[clazz_name]) {
                         auto &minfo = hk_info.method_info;
                         if (minfo.name == name && minfo.signature == descriptor) {
                                 should_hook = true;
-                                hook_offset = hk_info.hook_offset;
+                                bytecode_offset = hk_info.bytecode_offset;
                                 break;
                         }
                 }
@@ -328,7 +329,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 else if (strcmp(name, "<clinit>") == 0) {
                     hookType = hook_clinit;
                 }
-                else if (hook_offset != 0) {
+                else if (bytecode_offset) {
                     hookType = hook_midfunction;
                 }
                 // New method
@@ -544,7 +545,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                             auto nativeMethodid = cf->addMethodRef(cf->thisClassIndex, newName.c_str(), descriptor);
                             auto iterator = instList.begin();
                             
-                            for (size_t i = 0; i < hook_offset; i++) {
+                            for (size_t i = 0; i < bytecode_offset.value(); i++) {
                                 if (iterator->next == nullptr) {
                                     break;
                                 }
@@ -862,7 +863,7 @@ JNIHook_Init(JavaVM *jvm)
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-_JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method,size_t offset)
+_JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method, std::optional<size_t> bytecode_offset)
 {
         jclass clazz;
         std::string clazz_name;
@@ -897,7 +898,7 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
             hookType = hook_clinit;
             native_name = get_copy_method_name(method_info->name, clazz_name);
         }
-        else if (offset != 0) {
+        else if (bytecode_offset) {
             hookType = hook_midfunction;
             native_name = get_copy_method_name(method_info->name, clazz_name);
         }
@@ -909,7 +910,7 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
 
         hook_info.method_info = *method_info;
         hook_info.native_hook_method = native_hook_method;
-        hook_info.hook_offset = offset;
+        hook_info.bytecode_offset = bytecode_offset;
 
         // Force caching of the class being hooked
         result = CacheClass(env, clazz);
@@ -1028,29 +1029,32 @@ JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method)
 {
         try {
-                return _JNIHook_Attach(method, native_hook_method, original_method,0);
-        } catch (jnif::Exception ex) {
+                return _JNIHook_Attach(method, native_hook_method, original_method, std::nullopt);
+        }
+        catch (jnif::Exception ex) {
                 LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
                 return JNIHOOK_ERR_CLASS_FILE_FORMAT;
-        } catch (...) {
+        }
+        catch (...) {
                 LOG("ERR: Unhandled exception thrown\n");
         }
         return JNIHOOK_ERR_UNKNOWN;
 }
+
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach_MID(jmethodID method, void* native_hook_method, jmethodID* original_method,size_t offset)
+JNIHook_BytecodeAttach(jmethodID method, void* native_hook_method, jmethodID *original_method, size_t offset)
 {
-    try {
-        return _JNIHook_Attach(method, native_hook_method, original_method,offset);
-    }
-    catch (jnif::Exception ex) {
-        LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
-        return JNIHOOK_ERR_CLASS_FILE_FORMAT;
-    }
-    catch (...) {
-        LOG("ERR: Unhandled exception thrown\n");
-    }
-    return JNIHOOK_ERR_UNKNOWN;
+        try {
+                return _JNIHook_Attach(method, native_hook_method, original_method, offset);
+        }
+        catch (jnif::Exception ex) {
+                LOG("ERR: JNIF exception thrown -> %s\n", ex.message.c_str());
+                return JNIHOOK_ERR_CLASS_FILE_FORMAT;
+        }
+        catch (...) {
+                LOG("ERR: Unhandled exception thrown\n");
+        }
+        return JNIHOOK_ERR_UNKNOWN;
 }
 
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL

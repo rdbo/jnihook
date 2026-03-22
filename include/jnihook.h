@@ -73,7 +73,7 @@ JNIHOOK_API jnihook_result_t JNIHOOK_CALL
 JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_method);
 
 /**
- * Attaches a mid-function hook to a Java method
+ * Attaches a hook after N instructions of a Java method (mid-function hook)
  * NOTE: Native method signatures are as follows:
  *           ReturnType (*fnPtr)(JNIEnv *env, jobject objectOrClass, ...);
  *
@@ -84,7 +84,7 @@ JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_m
  * @return JNIHOOK_OK on success, JNIHOOK_ERR_* on failure.
  */
 JNIHOOK_API jnihook_result_t JNIHOOK_CALL
-JNIHook_Attach_MID(jmethodID method, void *native_hook_method, jmethodID *original_method,size_t offset=0);
+JNIHook_BytecodeAttach(jmethodID method, void *native_hook_method, jmethodID *original_method, size_t offset);
 
 /**
  * Detaches a hook from a Java method

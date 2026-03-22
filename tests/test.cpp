@@ -118,7 +118,7 @@ start()
                 std::cerr << "[!] Failed to initialize JNIHook: " << result << std::endl;
                 goto DETACH;
         }
-        std::cout << "[*] JNIHook initialized successfully";
+        std::cout << "[*] JNIHook initialized successfully" << std::endl;
 
         if (auto result = JNIHook_Attach(Target_Constructor_mid, reinterpret_cast<void*>(hk_Target_Constructor), &orig_Target_Constructor); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
@@ -138,19 +138,19 @@ start()
         }
         std::cout << "[*] Target::sayAnotherThing hooked successfully!" << std::endl;
 
-        if (auto result = JNIHook_Attach_MID(Target_midFunctionTest_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest), &orig_Target_midFunctionTest,5); result != JNIHOOK_OK) {
+        if (auto result = JNIHook_BytecodeAttach(Target_midFunctionTest_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest), &orig_Target_midFunctionTest, 5); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
             goto DETACH;
         }
         std::cout << "[*] Target::midFunctionTest hooked successfully!" << std::endl;
 
-        if (auto result = JNIHook_Attach_MID(Target_midFunctionTest2_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest2), &orig_Target_midFunctionTest2, 5); result != JNIHOOK_OK) {
+        if (auto result = JNIHook_BytecodeAttach(Target_midFunctionTest2_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest2), &orig_Target_midFunctionTest2, 5); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
             goto DETACH;
         }
         std::cout << "[*] Target::midFunctionTest2 hooked successfully!" << std::endl;
 
-        if (auto result = JNIHook_Attach_MID(Target_midFunctionTest3_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest3), &orig_Target_midFunctionTest3, 4); result != JNIHOOK_OK) {
+        if (auto result = JNIHook_BytecodeAttach(Target_midFunctionTest3_mid, reinterpret_cast<void*>(hk_Target_midFunctionTest3), &orig_Target_midFunctionTest3, 4); result != JNIHOOK_OK) {
             std::cerr << "[!] Failed to attach hook: " << result << std::endl;
             goto DETACH;
         }
