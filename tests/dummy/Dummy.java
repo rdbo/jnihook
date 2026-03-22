@@ -1,13 +1,22 @@
 package dummy;
 
 import java.io.IOException;
-class Target {
+
+class TargetSuperclass {
+    public TargetSuperclass() {
+        System.out.println("TargetSuperclass called!");
+    }
+}
+
+class Target extends TargetSuperclass {
     public static class TargetSubclass {
         public static void doWhatever() {
             System.out.println("do whatever");
         }
     }
+
     public Target() {
+        super();
         System.out.println("constructor");
     }
     public static Target newTarget() {
