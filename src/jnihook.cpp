@@ -61,11 +61,11 @@ typedef struct hook_info_t {
         std::optional<size_t> bytecode_offset;
 } hook_info_t;
 
-enum hkType {
-    hook_default = 0,
-    hook_init,
-    hook_clinit,
-    hook_midfunction,
+enum class HookType {
+    Native,           // Native method hooking (default)
+    Init,             // Constructor (bytecode hooking + specific things)
+    ClInit,           // Static class initializer (bytecode hooking + specific things)
+    Bytecode, // Bytecode hooking
 };
 
 static std::unique_ptr<jnihook_t> g_jnihook = nullptr;
@@ -322,15 +322,15 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 if (!should_hook)
                         continue;
 
-                hkType hookType = hook_default;
+                HookType hookType = HookType::Native;
                 if (strcmp(name, "<init>") == 0) {
-                    hookType = hook_init;
+                    hookType = HookType::Init;
                 }
                 else if (strcmp(name, "<clinit>") == 0) {
-                    hookType = hook_clinit;
+                    hookType = HookType::ClInit;
                 }
                 else if (bytecode_offset) {
-                    hookType = hook_midfunction;
+                    hookType = HookType::Bytecode;
                 }
                 // New method
                 std::string newName = get_copy_method_name(name, cf->getThisClassName());
@@ -360,8 +360,8 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                 };
 
                 // constructor hook
-                if (hookType == hook_init or 
-                    hookType == hook_clinit) {
+                if (hookType == HookType::Init or 
+                    hookType == HookType::ClInit) {
 
                     std::string copyName = get_copy_clone_name(name, cf->getThisClassName());
                     auto& copyMethod = cf->addMethod(copyName.c_str(), descriptor, copyflags);
@@ -414,7 +414,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
 
                             auto nativeMethodid = cf->addMethodRef(cf->thisClassIndex, newName.c_str(), descriptor);
                             auto iterator = orig_instList.begin();
-                            if (hookType == hook_init) {
+                            if (hookType == HookType::Init) {
                                 //patch original <init>
                                 // skip empty begin and invoke
                                 iterator.operator++();//empty
@@ -494,7 +494,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
 
                                 orig_ca->codeLen = orig_instList.size();
                             }
-                            else if (hookType == hook_clinit) {
+                            else if (hookType == HookType::ClInit) {
                                 //patch original <clinit>
                                 deleteNextInsts(iterator);
                                 orig_instList.addInvoke(Opcode::invokestatic, nativeMethodid, *iterator); // nativeMethod()
@@ -510,7 +510,7 @@ ReapplyClass(jclass clazz, std::string clazz_name)
                     *(u2*)&nativeMethod.accessFlags |= Method::NATIVE;
                 }
                 // mid function hook
-                else if (hookType == hook_midfunction) {
+                else if (hookType == HookType::Bytecode) {
                     /*
                         if midfunction hook
                         make native method to store hook
@@ -871,7 +871,7 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         JNIEnv *env;
         jnihook_result_t result;
 
-        hkType hookType = hook_default;
+        HookType hookType = HookType::Native;
 
         if (g_jnihook->jvm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_8)) {
                 LOG("ERR: Failed to get JNI\n");
@@ -892,14 +892,14 @@ _JNIHook_Attach(jmethodID method, void *native_hook_method, jmethodID *original_
         auto method_info = get_method_info(g_jnihook->jvmti, method);
         std::string native_name = method_info->name;
         if (method_info->name == "<init>") {
-            hookType = hook_init;
+            hookType = HookType::Init;
             native_name = get_copy_method_name(method_info->name, clazz_name);
         }else if (method_info->name == "<clinit>") {
-            hookType = hook_clinit;
+            hookType = HookType::ClInit;
             native_name = get_copy_method_name(method_info->name, clazz_name);
         }
         else if (bytecode_offset) {
-            hookType = hook_midfunction;
+            hookType = HookType::Bytecode;
             native_name = get_copy_method_name(method_info->name, clazz_name);
         }
 
@@ -987,14 +987,14 @@ RESUME_THREADS:
                 
                 std::string original_name; 
                 switch (hookType) {
-                case hook_init:
-                case hook_clinit:
+                case HookType::Init:
+                case HookType::ClInit:
                     original_name = get_copy_clone_name(method_info->name, clazz_name);
                     break;
-                case hook_midfunction:
+                case HookType::Bytecode:
                     original_name = method_info->name;
                     break;
-                case hook_default:
+                case HookType::Native:
                     original_name = get_copy_method_name(method_info->name, clazz_name);
                     break;
                 }
